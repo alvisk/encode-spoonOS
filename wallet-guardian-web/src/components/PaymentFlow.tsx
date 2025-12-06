@@ -110,6 +110,7 @@ export function PaymentFlow({ requirements, onPaymentComplete, onCancel }: Payme
 
     try {
       // Convert requirements to x402 PaymentRequirements format
+      // Use a longer timeout (10 minutes) to give user enough time to review and sign
       const paymentRequirements: PaymentRequirements = {
         scheme: requirements.scheme as "exact",
         network: requirements.network as "base-sepolia",
@@ -118,13 +119,15 @@ export function PaymentFlow({ requirements, onPaymentComplete, onCancel }: Payme
         description: requirements.description ?? "SpoonOS agent service",
         mimeType: requirements.mimeType ?? "application/json",
         payTo: requirements.payTo as `0x${string}`,
-        maxTimeoutSeconds: requirements.maxTimeoutSeconds ?? 120,
+        maxTimeoutSeconds: 600, // 10 minutes to give user time to sign
         asset: requirements.asset as `0x${string}`,
         extra: requirements.extra,
       };
 
       // Use x402 library to create the payment header
       // The walletClient from wagmi is compatible with x402's EvmSigner type
+      console.log("[x402] Creating payment header with requirements:", paymentRequirements);
+      
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any
       const paymentHeader = await createPaymentHeader(
         walletClient as unknown as Parameters<typeof createPaymentHeader>[0],
@@ -132,6 +135,9 @@ export function PaymentFlow({ requirements, onPaymentComplete, onCancel }: Payme
         paymentRequirements
       );
 
+      console.log("[x402] Payment header created:", paymentHeader.substring(0, 100) + "...");
+      console.log("[x402] Full payment header length:", paymentHeader.length);
+      
       setCurrentStep("complete");
       onPaymentComplete(paymentHeader);
     } catch (err) {

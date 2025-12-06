@@ -65,26 +65,27 @@ def build_agent() -> ToolCallAgent:
     tools = get_tools()
     tool_manager = ToolManager(tools)
     
-    # Support multiple LLM providers
-    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    # Support multiple LLM providers - prioritize OpenAI for reliability
     openai_key = os.getenv("OPENAI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     
-    if gemini_key:
+    if openai_key:
         llm = ChatBot(
-            llm_provider="gemini",
-            api_key=gemini_key,
-            model_name="gemini-2.0-flash",
+            llm_provider="openai",
+            api_key=openai_key,
+            model_name="gpt-4o-mini",  # Cost-effective and reliable
         )
     elif anthropic_key:
         llm = ChatBot(
             llm_provider="anthropic",
             api_key=anthropic_key,
         )
-    elif openai_key:
+    elif gemini_key:
         llm = ChatBot(
-            llm_provider="openai",
-            api_key=openai_key,
+            llm_provider="gemini",
+            api_key=gemini_key,
+            model_name="gemini-2.0-flash",
         )
     else:
         # Fallback - let ChatBot use defaults

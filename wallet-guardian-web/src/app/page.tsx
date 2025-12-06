@@ -142,7 +142,7 @@ export default function HomePage() {
   const [scanWallet, setScanWallet] = useState<Wallet | null>(null);
   const [scanActivity, setScanActivity] = useState<Activity[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<SpoonOSAnalysis | null>(null);
-  const [usePaywalled, setUsePaywalled] = useState(false);
+  const [usePaywalled, setUsePaywalled] = useState(true); // Default to x402 paywalled endpoint
   const [x402Requirements, setX402Requirements] = useState<X402Requirements | null>(null);
   const [paymentHeader, setPaymentHeader] = useState("");
 
@@ -206,12 +206,21 @@ export default function HomePage() {
     };
   }, []);
 
-  const runSelfScan = async () => {
+  const runSelfScan = async (overridePaymentHeader?: string) => {
     if (!scanAddress.trim()) return;
     setScanStatus("loading");
     setScanError(null);
     setAiAnalysis(null);
-    setX402Requirements(null);
+    
+    // Use override payment header if provided, otherwise use state
+    const effectivePaymentHeader: string = typeof overridePaymentHeader === "string" 
+      ? overridePaymentHeader 
+      : (typeof paymentHeader === "string" ? paymentHeader : "");
+    
+    // Don't reset x402Requirements if we have a payment header (retry scenario)
+    if (!effectivePaymentHeader || effectivePaymentHeader.length === 0) {
+      setX402Requirements(null);
+    }
     
     try {
       let spoonRes: Response;
@@ -223,9 +232,14 @@ export default function HomePage() {
         };
         
         // Add payment header if provided
-        if (paymentHeader.trim()) {
-          headers["X-PAYMENT"] = paymentHeader.trim();
+        if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
+          headers["X-PAYMENT"] = effectivePaymentHeader;
+          console.log("[x402] Sending payment header:", effectivePaymentHeader.substring(0, 50) + "...");
+        } else {
+          console.log("[x402] No payment header, initial request");
         }
+        
+        console.log("[x402] Making request to:", `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`);
         
         spoonRes = await fetch(
           `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
@@ -238,8 +252,20 @@ export default function HomePage() {
           }
         );
         
+        console.log("[x402] Response status:", spoonRes.status);
+        
         // Handle 402 Payment Required
         if (spoonRes.status === 402) {
+          // If we already sent a payment header and still got 402, the payment was rejected
+          if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
+            const errorData = await spoonRes.json() as { error?: string; payer?: string };
+            console.error("[x402] Payment rejected:", errorData);
+            setScanError(`Payment rejected: ${errorData.error ?? "Unknown error"}`);
+            setPaymentHeader(""); // Clear the invalid payment header
+            setScanStatus("error");
+            return;
+          }
+          
           const paymentData = await spoonRes.json() as { accepts?: X402Requirements[] };
           if (paymentData.accepts && paymentData.accepts.length > 0) {
             setX402Requirements(paymentData.accepts[0] ?? null);
@@ -445,10 +471,9 @@ export default function HomePage() {
                 onPaymentComplete={(signedPaymentHeader) => {
                   // After user signs authorization, set the x402 payment header and retry
                   setPaymentHeader(signedPaymentHeader);
-                  // Auto-retry the scan with the signed payment proof
-                  setTimeout(() => {
-                    void runSelfScan();
-                  }, 500);
+                  console.log("[x402] Payment complete, retrying with header length:", signedPaymentHeader.length);
+                  // Pass payment header directly to avoid React state timing issues
+                  void runSelfScan(signedPaymentHeader);
                 }}
                 onCancel={() => {
                   setScanStatus("idle");
