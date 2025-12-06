@@ -21,8 +21,7 @@ class FlagCounterpartyRiskTool(BaseTool):
     }
 
     async def execute(self, address: str, counterparties: List[str]):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(address=address, counterparties=counterparties)
+        return self.call(address, counterparties)
 
     def call(self, address: str, counterparties: List[str]):
         # TODO: lookup labels/blocklists (local JSON or HTTP)

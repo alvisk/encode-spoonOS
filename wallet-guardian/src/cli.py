@@ -1,10 +1,17 @@
 """Very small CLI to run the ToolCallAgent once."""
 
 import argparse
+import asyncio
 import json
 import os
 
 from .agent import build_agent
+
+
+async def run_agent(prompt: str):
+    agent = build_agent()
+    result = await agent.run(prompt)
+    return result
 
 
 def main():
@@ -18,9 +25,9 @@ def main():
     user_prompt = " ".join(args.prompt)
     if args.mock:
         os.environ["WALLET_GUARDIAN_USE_MOCK"] = "true"
-    agent = build_agent()
-    result = agent.run(user_prompt)  # type: ignore[attr-defined]
-    print(json.dumps(result, indent=2))
+    
+    result = asyncio.run(run_agent(user_prompt))
+    print(result)
 
 
 if __name__ == "__main__":

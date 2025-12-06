@@ -22,8 +22,7 @@ class ActionDraftTool(BaseTool):
     }
 
     async def execute(self, summary: str, risk_flags: List[str], channel: str = "console"):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(summary=summary, risk_flags=risk_flags, channel=channel)
+        return self.call(summary, risk_flags, channel)
 
     def call(self, summary: str, risk_flags: List[str], channel: str = "console"):
         # TODO: tailor tone/length per channel; avoid financial advice wording

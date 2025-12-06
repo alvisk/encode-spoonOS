@@ -53,8 +53,7 @@ class GetWalletSummaryTool(BaseTool):
     }
 
     async def execute(self, address: str, chain: str = "neo3", lookback_days: int = 30, use_mock: bool = False):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(address=address, chain=chain, lookback_days=lookback_days, use_mock=use_mock)
+        return self.call(address, chain, lookback_days, use_mock)
 
     def call(self, address: str, chain: str = "neo3", lookback_days: int = 30, use_mock: bool = False):
         if chain != "neo3":

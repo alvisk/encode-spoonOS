@@ -14,8 +14,7 @@ class ApprovalScanTool(BaseTool):
     }
 
     async def execute(self, address: str):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(address=address)
+        return self.call(address)
 
     def call(self, address: str):
         # TODO: fetch approvals/allowances; flag unlimited or unlabeled contracts

@@ -27,8 +27,7 @@ class WalletValidityScoreTool(BaseTool):
     }
 
     async def execute(self, address: str, lookback_days: int = 30) -> Dict[str, Any]:
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(address=address, lookback_days=lookback_days)
+        return self.call(address, lookback_days)
 
     def call(self, address: str, lookback_days: int = 30) -> Dict[str, Any]:
         summary_tool = GetWalletSummaryTool()

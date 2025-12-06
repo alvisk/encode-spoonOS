@@ -22,8 +22,7 @@ class ScheduleMonitorTool(BaseTool):
     }
 
     async def execute(self, address: str, interval_minutes: int, conditions: Optional[List[str]] = None):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(address=address, interval_minutes=interval_minutes, conditions=conditions)
+        return self.call(address, interval_minutes, conditions)
 
     def call(self, address: str, interval_minutes: int, conditions: Optional[List[str]] = None):
         # TODO: register a job (cron/worker) to rerun GetWalletSummaryTool and diff

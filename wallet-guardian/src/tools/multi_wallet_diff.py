@@ -20,8 +20,7 @@ class MultiWalletDiffTool(BaseTool):
     }
 
     async def execute(self, addresses: List[str]):
-        """Execute the tool (required by BaseTool interface)."""
-        return self.call(addresses=addresses)
+        return self.call(addresses)
 
     def call(self, addresses: List[str]):
         # TODO: call GetWalletSummaryTool per address (or inject summaries)
