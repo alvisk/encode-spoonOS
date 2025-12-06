@@ -128,7 +128,6 @@ export function PaymentFlow({ requirements, onPaymentComplete, onCancel }: Payme
       // The walletClient from wagmi is compatible with x402's EvmSigner type
       console.log("[x402] Creating payment header with requirements:", paymentRequirements);
       
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any
       const paymentHeader = await createPaymentHeader(
         walletClient as unknown as Parameters<typeof createPaymentHeader>[0],
         1, // x402 version

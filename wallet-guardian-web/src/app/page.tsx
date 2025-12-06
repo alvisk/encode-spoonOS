@@ -37,9 +37,8 @@ type Activity = NonNullable<(typeof mockActivityByAddress)[string]>[number];
 
 // SpoonOS API response type
 type SpoonOSAnalysis = {
-  agent: string;
-  prompt: string;
-  response: string;
+  result: string;
+  payer?: string;
 };
 
 // x402 payment requirements type
@@ -411,7 +410,7 @@ export default function HomePage() {
                   className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[6px_6px_0_0_#000] focus:outline-none focus:shadow-[4px_4px_0_0_#000] focus:translate-x-0.5 focus:translate-y-0.5 transition-none"
                 />
                 <Button
-                  onClick={runSelfScan}
+                  onClick={() => void runSelfScan()}
                   disabled={scanStatus === "loading" || !scanAddress.trim()}
                   className="neo-button border-4 border-black bg-[#00FF00] text-black shadow-[6px_6px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none uppercase tracking-wider font-black px-8 disabled:opacity-50"
                 >
@@ -497,7 +496,7 @@ export default function HomePage() {
                           {"//"} SPOONOS AI ANALYSIS
                         </p>
                         <p className="text-xs text-white/60 font-mono">
-                          Agent: {aiAnalysis.agent}
+                          Agent: wallet-guardian
                         </p>
                       </div>
                       <Badge className="ml-auto neo-pill bg-[#00FF00] text-black border-2 border-black shadow-[3px_3px_0_0_#FFFF00] font-black uppercase text-xs">
@@ -506,12 +505,17 @@ export default function HomePage() {
                     </div>
                     <div className="prose prose-invert prose-sm max-w-none">
                       <div className="whitespace-pre-wrap text-sm leading-relaxed text-white/90 font-medium">
-                        {aiAnalysis.response}
+                        {aiAnalysis.result}
                       </div>
                     </div>
                     <div className="mt-4 pt-4 border-t border-white/20">
                       <p className="text-xs text-white/50 font-mono">
                         Powered by SpoonOS x402 Gateway • Neo N3 Blockchain
+                        {aiAnalysis.payer && (
+                          <span className="block mt-1">
+                            Paid by: {aiAnalysis.payer.slice(0, 6)}...{aiAnalysis.payer.slice(-4)}
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
