@@ -1,18 +1,26 @@
-"""Tool to compute a simple wallet validity/risk score on Neo N3."""
+"""Tool to compute a simple wallet validity/risk score on Neo N3.
+
+Uses the canonical compute_risk_score from graph_orchestrator to ensure
+consistent scoring across the entire system.
+"""
 
 from typing import Any, ClassVar, Dict
 
 from spoon_ai.tools import BaseTool
 
-from .get_wallet_summary import (
-    GetWalletSummaryTool,
-    _compute_concentration,
-    _stablecoin_ratio,
-    _extract_counterparties,
+from .get_wallet_summary import GetWalletSummaryTool
+from ..graph_orchestrator import (
+    compute_concentration,
+    compute_stablecoin_ratio,
+    extract_counterparties,
+    detect_suspicious_patterns,
+    compute_risk_score,
 )
 
 
 class WalletValidityScoreTool(BaseTool):
+    """Compute a validity/risk score using canonical functions."""
+    
     name: ClassVar[str] = "wallet_validity_score"
     description: ClassVar[str] = (
         "Compute a 0-100 validity/risk score for a Neo N3 wallet using balances/transfers."
@@ -38,59 +46,41 @@ class WalletValidityScoreTool(BaseTool):
         balances = summary.get("balances", [])
         transfers = summary.get("transfers", {}) or {}
 
-        concentration = _compute_concentration(balances)
-        stable_ratio = _stablecoin_ratio(balances)
-        counterparties = _extract_counterparties(transfers)
+        # Use canonical functions from graph_orchestrator
+        concentration = compute_concentration(balances)
+        stable_ratio = compute_stablecoin_ratio(balances)
+        counterparties = extract_counterparties(transfers)
+        suspicious_patterns = detect_suspicious_patterns(transfers)
 
-        score = 100.0
-        deductions = []
+        # Use the canonical risk scoring function
+        score, deductions = compute_risk_score(
+            concentration,
+            stable_ratio,
+            len(counterparties),
+            suspicious_patterns
+        )
 
-        # Concentration penalty
-        if concentration > 0.8:
-            penalty = 20
-            deductions.append({"reason": "high_concentration", "penalty": penalty})
-            score -= penalty
-        elif concentration > 0.6:
-            penalty = 10
-            deductions.append({"reason": "moderate_concentration", "penalty": penalty})
-            score -= penalty
-
-        # Stablecoin buffer
-        if stable_ratio < 0.05:
-            penalty = 10
-            deductions.append({"reason": "very_low_stablecoin_buffer", "penalty": penalty})
-            score -= penalty
-        elif stable_ratio < 0.1:
-            penalty = 5
-            deductions.append({"reason": "low_stablecoin_buffer", "penalty": penalty})
-            score -= penalty
-
-        # Activity / counterparty diversity
-        if len(counterparties) == 0:
-            penalty = 10
-            deductions.append({"reason": "inactive_or_new_wallet", "penalty": penalty})
-            score -= penalty
-        elif len(counterparties) < 3:
-            penalty = 5
-            deductions.append({"reason": "low_counterparty_diversity", "penalty": penalty})
-            score -= penalty
-
-        # Carry over existing risk flags
-        for flag in summary.get("risk_flags", []):
-            deductions.append({"reason": flag, "penalty": 0})
-
-        score = max(0.0, min(100.0, score))
+        # Determine risk level
+        risk_level = (
+            "clean" if score >= 90 else
+            "low" if score >= 70 else
+            "moderate" if score >= 50 else
+            "high" if score >= 30 else
+            "critical"
+        )
 
         return {
             "address": address,
             "lookback_days": lookback_days,
             "score": score,
+            "risk_level": risk_level,
             "deductions": deductions,
             "metrics": {
                 "concentration": concentration,
                 "stablecoin_ratio": stable_ratio,
                 "counterparty_count": len(counterparties),
             },
+            "suspicious_patterns": suspicious_patterns,
             "risk_flags": summary.get("risk_flags", []),
             "balances": balances,
             "transfers": transfers,

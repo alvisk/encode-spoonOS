@@ -45,4 +45,86 @@ class NeoClient:
         """Return transfers in/out for a time window."""
         return self._rpc("getnep17transfers", [address, start_time, end_time])
 
+    def get_contract_state(self, contract_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        Get smart contract state/info by script hash.
+        
+        Args:
+            contract_hash: Contract script hash (with or without 0x prefix)
+            
+        Returns:
+            Contract state dict or None if not found
+        """
+        try:
+            # Ensure proper format
+            if not contract_hash.startswith("0x"):
+                contract_hash = "0x" + contract_hash
+            return self._rpc("getcontractstate", [contract_hash])
+        except NeoRPCError:
+            return None
+
+    def get_block_count(self) -> int:
+        """Get current block height."""
+        return self._rpc("getblockcount", [])
+
+    def get_block(self, index_or_hash: Any, verbose: int = 1) -> Optional[Dict[str, Any]]:
+        """Get block by index or hash."""
+        try:
+            return self._rpc("getblock", [index_or_hash, verbose])
+        except NeoRPCError:
+            return None
+
+    def get_application_log(self, tx_hash: str) -> Optional[Dict[str, Any]]:
+        """Get application log for a transaction (shows contract invocations)."""
+        try:
+            return self._rpc("getapplicationlog", [tx_hash])
+        except NeoRPCError:
+            return None
+
+    def invoke_function(
+        self, 
+        contract_hash: str, 
+        method: str, 
+        params: List[Any] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Invoke a contract function (read-only, no state change).
+        
+        Args:
+            contract_hash: Contract script hash
+            method: Method name to invoke
+            params: Parameters for the method
+            
+        Returns:
+            Invocation result or None on error
+        """
+        try:
+            if not contract_hash.startswith("0x"):
+                contract_hash = "0x" + contract_hash
+            return self._rpc("invokefunction", [contract_hash, method, params or []])
+        except NeoRPCError:
+            return None
+
+    def get_storage(
+        self,
+        contract_hash: str,
+        key: str
+    ) -> Optional[str]:
+        """
+        Get storage value for a contract key.
+        
+        Args:
+            contract_hash: Contract script hash
+            key: Storage key (hex encoded)
+            
+        Returns:
+            Storage value (hex encoded) or None if not found
+        """
+        try:
+            if not contract_hash.startswith("0x"):
+                contract_hash = "0x" + contract_hash
+            return self._rpc("getstorage", [contract_hash, key])
+        except NeoRPCError:
+            return None
+
 

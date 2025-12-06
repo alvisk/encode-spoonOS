@@ -1,5 +1,10 @@
-"""Tool to fetch and summarize wallet data on Neo N3."""
+"""Tool to fetch and summarize wallet data on Neo N3.
 
+This module uses shared computation functions from graph_orchestrator to prevent
+redundant code. The UnifiedDataFetcher handles caching to avoid duplicate RPC calls.
+"""
+
+import asyncio
 import os
 import time
 from typing import Any, ClassVar, Dict, List, Optional
@@ -7,39 +12,17 @@ from typing import Any, ClassVar, Dict, List, Optional
 from spoon_ai.tools import BaseTool
 
 from ..neo_client import NeoClient, NeoRPCError
-
-
-def _compute_concentration(balances: List[Dict[str, Any]]) -> float:
-    total = sum(float(b.get("amount", 0)) for b in balances)
-    if total <= 0:
-        return 0.0
-    top = max(float(b.get("amount", 0)) for b in balances) if balances else 0.0
-    return top / total
-
-
-def _stablecoin_ratio(balances: List[Dict[str, Any]]) -> float:
-    total = sum(float(b.get("amount", 0)) for b in balances)
-    if total <= 0:
-        return 0.0
-    stable = 0.0
-    for b in balances:
-        symbol = (b.get("symbol") or "").upper()
-        if any(tag in symbol for tag in ("USD", "USDT", "USDC", "DAI", "FDUSD", "CUSDT")):
-            stable += float(b.get("amount", 0))
-    return stable / total
-
-
-def _extract_counterparties(transfers: Dict[str, Any]) -> List[str]:
-    cps = set()
-    for direction in ("sent", "received"):
-        for tx in transfers.get(direction, []):
-            other = tx.get("to") if direction == "sent" else tx.get("from")
-            if other:
-                cps.add(other)
-    return list(cps)
+from ..graph_orchestrator import (
+    compute_concentration,
+    compute_stablecoin_ratio,
+    extract_counterparties,
+    WalletDataCache,
+)
 
 
 class GetWalletSummaryTool(BaseTool):
+    """Fetch balances and transfers for a wallet on Neo N3 with risk metrics."""
+    
     name: ClassVar[str] = "get_wallet_summary"
     description: ClassVar[str] = "Fetch balances and transfers for a wallet on Neo N3 and compute simple risk metrics."
     parameters: ClassVar[Dict[str, Any]] = {
@@ -63,6 +46,12 @@ class GetWalletSummaryTool(BaseTool):
         if use_mock or env_mock:
             return _mock_summary(address=address, chain=chain, lookback_days=lookback_days)
 
+        # Check cache first
+        cache = WalletDataCache()
+        cached = cache.get("wallet_summary", address=address, lookback=lookback_days)
+        if cached is not None:
+            return cached
+
         client = NeoClient()
         now = int(time.time())
         start = now - lookback_days * 86400
@@ -72,12 +61,13 @@ class GetWalletSummaryTool(BaseTool):
             transfers = client.get_nep17_transfers(address, start, now)
         except NeoRPCError as exc:
             return {"error": f"rpc_error: {exc}"}
-        except Exception as exc:  # pragma: no cover - best effort guard
+        except Exception as exc:
             return {"error": f"unexpected_error: {exc}"}
 
-        concentration = _compute_concentration(balances)
-        stable_ratio = _stablecoin_ratio(balances)
-        counterparties = _extract_counterparties(transfers or {})
+        # Use canonical functions from graph_orchestrator
+        concentration = compute_concentration(balances)
+        stable_ratio = compute_stablecoin_ratio(balances)
+        counterparties = extract_counterparties(transfers or {})
 
         risk_flags = []
         if concentration > 0.8:
@@ -99,8 +89,12 @@ class GetWalletSummaryTool(BaseTool):
                 "counterparty_count": len(counterparties),
             },
             "risk_flags": risk_flags,
-            "counterparties": counterparties,
+            "counterparties": list(counterparties),
         }
+        
+        # Cache the result
+        cache.set("wallet_summary", summary, address=address, lookback=lookback_days)
+        
         return summary
 
 
@@ -121,9 +115,10 @@ def _mock_summary(address: str, chain: str, lookback_days: int) -> Dict[str, Any
         ],
     }
 
-    concentration = _compute_concentration(balances)
-    stable_ratio = _stablecoin_ratio(balances)
-    counterparties = _extract_counterparties(transfers)
+    # Use canonical functions
+    concentration = compute_concentration(balances)
+    stable_ratio = compute_stablecoin_ratio(balances)
+    counterparties = extract_counterparties(transfers)
 
     risk_flags = []
     if concentration > 0.8:
@@ -145,8 +140,9 @@ def _mock_summary(address: str, chain: str, lookback_days: int) -> Dict[str, Any
             "counterparty_count": len(counterparties),
         },
         "risk_flags": risk_flags,
-        "counterparties": counterparties,
+        "counterparties": list(counterparties),
         "mock": True,
     }
+
 
 
