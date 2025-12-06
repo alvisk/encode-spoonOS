@@ -252,4 +252,253 @@
       #FF0000 16px
     );
   }
+
+  /* ============================================
+     PRESENTATION / ABOUT PAGE STYLES
+     ============================================ */
+
+  /* Presentation section - full viewport height */
+  .presentation-section {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 4rem 2rem;
+    position: relative;
+  }
+
+  /* Glitch text effect layers */
+  .glitch-text {
+    position: relative;
+  }
+
+  .glitch-text::before,
+  .glitch-text::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.8;
+  }
+
+  .glitch-text::before {
+    color: var(--chart-4);
+    animation: glitch-1 0.3s infinite;
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+    transform: translate(-2px, -2px);
+  }
+
+  .glitch-text::after {
+    color: var(--main);
+    animation: glitch-2 0.3s infinite;
+    clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+    transform: translate(2px, 2px);
+  }
+
+  @keyframes glitch-1 {
+    0%, 100% { transform: translate(-2px, -2px); }
+    25% { transform: translate(2px, 0); }
+    50% { transform: translate(-1px, 2px); }
+    75% { transform: translate(1px, -1px); }
+  }
+
+  @keyframes glitch-2 {
+    0%, 100% { transform: translate(2px, 2px); }
+    25% { transform: translate(-2px, 0); }
+    50% { transform: translate(1px, -2px); }
+    75% { transform: translate(-1px, 1px); }
+  }
+
+  /* Slam animation */
+  @keyframes slam {
+    0% { 
+      transform: scale(0) rotate(-15deg); 
+      opacity: 0; 
+    }
+    60% { 
+      transform: scale(1.1) rotate(3deg); 
+    }
+    80% { 
+      transform: scale(0.95) rotate(-1deg); 
+    }
+    100% { 
+      transform: scale(1) rotate(0); 
+      opacity: 1; 
+    }
+  }
+
+  .animate-slam {
+    animation: slam 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
+  /* Draw line animation for connectors */
+  @keyframes draw-line {
+    from { 
+      stroke-dashoffset: 100%; 
+      opacity: 0;
+    }
+    to { 
+      stroke-dashoffset: 0; 
+      opacity: 1;
+    }
+  }
+
+  .animate-draw-line {
+    animation: draw-line 0.5s ease-out forwards;
+  }
+
+  /* Typewriter cursor blink */
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .animate-cursor {
+    animation: cursor-blink 0.8s step-end infinite;
+  }
+
+  /* Shake animation for emphasis */
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-5px) rotate(-1deg); }
+    20% { transform: translateX(5px) rotate(1deg); }
+    30% { transform: translateX(-5px) rotate(-1deg); }
+    40% { transform: translateX(5px) rotate(1deg); }
+    50% { transform: translateX(-3px); }
+    60% { transform: translateX(3px); }
+    70% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+    90% { transform: translateX(-1px); }
+  }
+
+  .animate-shake {
+    animation: shake 0.6s ease-in-out;
+  }
+
+  /* Pulse glow effect */
+  @keyframes pulse-glow {
+    0%, 100% { 
+      box-shadow: var(--shadow), 0 0 0 0 var(--main);
+    }
+    50% { 
+      box-shadow: var(--shadow), 0 0 20px 5px var(--main);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Reveal from left */
+  @keyframes reveal-left {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  .animate-reveal-left {
+    animation: reveal-left 0.6s ease-out forwards;
+  }
+
+  /* Stagger children utility */
+  .stagger-children > * {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  .stagger-children.animate > *:nth-child(1) { animation: fade-up 0.4s 0.1s forwards; }
+  .stagger-children.animate > *:nth-child(2) { animation: fade-up 0.4s 0.2s forwards; }
+  .stagger-children.animate > *:nth-child(3) { animation: fade-up 0.4s 0.3s forwards; }
+  .stagger-children.animate > *:nth-child(4) { animation: fade-up 0.4s 0.4s forwards; }
+  .stagger-children.animate > *:nth-child(5) { animation: fade-up 0.4s 0.5s forwards; }
+  .stagger-children.animate > *:nth-child(6) { animation: fade-up 0.4s 0.6s forwards; }
+
+  @keyframes fade-up {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Brutalist marquee text */
+  @keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .animate-marquee {
+    animation: marquee 20s linear infinite;
+  }
+
+  /* Hard flash effect */
+  @keyframes hard-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .animate-hard-flash {
+    animation: hard-flash 0.1s step-end 3;
+  }
+
+  /* Scan line overlay for retro effect */
+  .presentation-scan-lines::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.015) 2px,
+      rgba(0, 0, 0, 0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Number counter style */
+  .number-counter {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Code block styling */
+  .code-block {
+    @apply font-mono text-sm;
+    tab-size: 2;
+  }
+
+  .code-block .keyword { color: var(--main); font-weight: bold; }
+  .code-block .string { color: var(--chart-5); }
+  .code-block .comment { color: var(--chart-2); opacity: 0.6; }
+  .code-block .decorator { color: var(--chart-3); }
+  .code-block .function { color: var(--chart-4); }
+
+  /* Dark mode grid overlay */
+  .dark .grid-overlay {
+    background-image: 
+      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  }
+
+  /* Responsive typography for presentation */
+  @media (max-width: 768px) {
+    .presentation-title {
+      font-size: 3rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .presentation-title {
+      font-size: 2rem;
+    }
+  }
 }

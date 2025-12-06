@@ -27,8 +27,18 @@ from pydantic import BaseModel
 # Load environment variables
 load_dotenv(override=True)
 
-# Import tools and agent config (not the agent itself to avoid LLM requirement)
-from src.agent import register_agent, AGENT_NAME, get_tools
+# Import agent and tools
+from src.agent import register_agent, AGENT_NAME, get_tools, build_agent
+
+# Global agent instance (lazy initialization)
+_agent = None
+
+def get_agent():
+    """Get or create the agent instance."""
+    global _agent
+    if _agent is None:
+        _agent = build_agent()
+    return _agent
 
 
 # =============================================================================
@@ -47,6 +57,7 @@ class InvokeResponse(BaseModel):
     prompt: str
     response: str
     tools_used: list[str] = []
+    reasoning_trace: list[str] = []  # Show LLM decision-making
 
 
 class PaymentRequirements(BaseModel):
@@ -251,77 +262,38 @@ async def invoke_agent(
         os.environ["WALLET_GUARDIAN_USE_MOCK"] = "true"
     
     try:
-        # Call tools directly based on the prompt
-        # In production with LLM configured, the agent would parse and execute appropriately
+        # Use the actual SpoonOS agent for LLM-powered reasoning
+        agent = get_agent()
+        
+        # Run the agent with the user's prompt
+        response_text = await agent.run(request.prompt)
+        
+        # Extract tools used from the agent's tool_calls history
         tools_used = []
-        response_text = ""
+        reasoning_trace = []
         
-        # Simple prompt parsing for demo
-        prompt_lower = request.prompt.lower()
+        if hasattr(agent, 'tool_calls') and agent.tool_calls:
+            tools_used = [tc.function.name for tc in agent.tool_calls if hasattr(tc, 'function')]
         
-        if "analyze" in prompt_lower or "summary" in prompt_lower or "summarize" in prompt_lower:
-            # Extract address from prompt (simple parsing)
-            words = request.prompt.split()
-            address = None
-            for i, word in enumerate(words):
-                if word.lower() in ("wallet", "address") and i + 1 < len(words):
-                    address = words[i + 1].strip("\"'")
-                elif word.startswith("N") and len(word) > 30:
-                    address = word.strip("\"'")
-            
-            if address:
-                from src.tools import GetWalletSummaryTool, WalletValidityScoreTool
-                
-                summary_tool = GetWalletSummaryTool()
-                score_tool = WalletValidityScoreTool()
-                
-                summary = summary_tool.call(address=address, use_mock=request.use_mock)
-                score = score_tool.call(address=address)
-                
-                tools_used = ["get_wallet_summary", "wallet_validity_score"]
-                response_text = json.dumps({
-                    "summary": summary,
-                    "validity_score": score,
-                }, indent=2)
-            else:
-                response_text = "Please provide a wallet address to analyze. Example: 'analyze wallet NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq'"
+        # Extract reasoning from memory if available
+        if hasattr(agent, 'memory') and hasattr(agent.memory, 'messages'):
+            for msg in agent.memory.messages:
+                if hasattr(msg, 'role') and msg.role == 'assistant':
+                    content = getattr(msg, 'content', '')
+                    if content and isinstance(content, str):
+                        reasoning_trace.append(content[:200])  # Truncate for brevity
         
-        elif "score" in prompt_lower or "validity" in prompt_lower:
-            # Extract address
-            words = request.prompt.split()
-            address = None
-            for word in words:
-                if word.startswith("N") and len(word) > 30:
-                    address = word.strip("\"'")
-            
-            if address:
-                from src.tools import WalletValidityScoreTool
-                score_tool = WalletValidityScoreTool()
-                score = score_tool.call(address=address)
-                tools_used = ["wallet_validity_score"]
-                response_text = json.dumps(score, indent=2)
-            else:
-                response_text = "Please provide a wallet address. Example: 'score NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq'"
-        
-        else:
-            # Default response
-            response_text = f"""Neo Wallet Guardian Agent
-
-Available commands:
-- "analyze wallet <address>" - Get full wallet summary and risk analysis
-- "score <address>" - Get validity score for a wallet
-- "summarize <address>" - Get wallet balances and transfers
-
-Example: "analyze wallet NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq"
-
-Available tools: {[t.name for t in get_tools()]}
-"""
+        # Reset agent state for next request
+        agent.current_step = 0
+        if hasattr(agent, 'memory') and hasattr(agent.memory, 'clear'):
+            agent.memory.clear()
         
         return InvokeResponse(
             agent=agent_name,
             prompt=request.prompt,
             response=response_text,
             tools_used=tools_used,
+            reasoning_trace=reasoning_trace,
         )
         
     except Exception as e:

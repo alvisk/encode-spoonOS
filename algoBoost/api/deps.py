@@ -18,3 +18,4 @@ def get_agent():
     except Exception as exc:  # pragma: no cover - initialization guard
         logger.exception("Failed to build agent: %s", exc)
         raise
+

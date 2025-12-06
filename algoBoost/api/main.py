@@ -34,3 +34,4 @@ app = create_app()
 @app.get("/", tags=["health"])
 def root() -> dict[str, str]:
     return {"status": "ok"}
+

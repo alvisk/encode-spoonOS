@@ -97,3 +97,4 @@ on_user_task(task):
 - [ ] Add CLI command to simulate the 5GB FASTA workflow (dry-run mode for demo).
 - [ ] Wire simple dashboard/log output (Local vs AIOZ status) for demo clarity.
 
+
