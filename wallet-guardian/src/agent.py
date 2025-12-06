@@ -176,6 +176,44 @@ def get_guardian() -> WalletGuardian:
     return _guardian
 
 
+# =============================================================================
+# Server Compatibility Functions
+# =============================================================================
+
+AGENT_NAME = "Neo Wallet Guardian"
+
+
+def get_tools():
+    """Get list of available tools for the agent."""
+    return [
+        GetWalletSummaryTool(),
+        WalletValidityScoreTool(),
+        FlagCounterpartyRiskTool(),
+        ScheduleMonitorTool(),
+        MultiWalletDiffTool(),
+        ApprovalScanTool(),
+        ActionDraftTool(),
+    ]
+
+
+def register_agent() -> dict:
+    """Register agent configuration for API listing."""
+    return {
+        "name": AGENT_NAME,
+        "description": "AI-powered wallet analysis agent for Neo N3",
+        "version": "2.0.0",
+        "tools": [t.name for t in get_tools()],
+        "capabilities": [
+            "wallet_analysis",
+            "risk_assessment",
+            "suspicious_activity_detection",
+            "multi_wallet_comparison",
+            "real_time_monitoring",
+            "voice_alerts",  # New feature!
+        ],
+    }
+
+
 
 
 
