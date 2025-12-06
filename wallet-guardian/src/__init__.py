@@ -2,6 +2,16 @@
 
 # Core clients
 from .neo_client import NeoClient, NeoRPCError
+from .eth_client import (
+    EthClient,
+    Chain,
+    detect_chain,
+    is_valid_eth_address,
+    analyze_eth_wallet,
+    get_eth_client,
+    EthBalance,
+    EthTransaction,
+)
 
 # Suspicious transaction inspector
 from .SusInspector import SusInspector, inspect_wallet_for_suspicious_activity, SuspicionLevel
@@ -88,6 +98,14 @@ __all__ = [
     # Clients
     "NeoClient",
     "NeoRPCError",
+    "EthClient",
+    "Chain",
+    "detect_chain",
+    "is_valid_eth_address",
+    "analyze_eth_wallet",
+    "get_eth_client",
+    "EthBalance",
+    "EthTransaction",
     
     # Inspector
     "SusInspector",

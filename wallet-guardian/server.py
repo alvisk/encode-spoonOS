@@ -385,16 +385,44 @@ def get_alert_system():
 
 
 @app.post("/api/v2/analyze/{address}")
-async def analyze_wallet_v2(address: str, lookback_days: int = 30):
+async def analyze_wallet_v2(address: str, lookback_days: int = 30, chain: str = "auto"):
     """
     Analyze a single wallet using the graph orchestrator.
+    
+    Supports both Neo N3 and Ethereum addresses with auto-detection.
+    - Neo addresses start with 'N' (e.g., NikhQp1aAD1YFCiwknhM5LQQebj4464bCJ)
+    - Ethereum addresses start with '0x' (e.g., 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045)
     
     Returns comprehensive risk analysis with computation graph metrics.
     """
     try:
-        from src.graph_orchestrator import analyze_wallet
-        result = await analyze_wallet(address, lookback_days)
-        return JSONResponse(content=result)
+        from src.eth_client import detect_chain, Chain, EthClient, analyze_eth_wallet
+        
+        # Auto-detect chain from address format
+        if chain == "auto":
+            detected = detect_chain(address)
+            if detected == Chain.ETHEREUM:
+                chain = "ethereum"
+            elif detected == Chain.NEO3:
+                chain = "neo3"
+            else:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Could not detect chain for address: {address}. Use 'chain' parameter."
+                )
+        
+        # Route to appropriate analyzer
+        if chain == "ethereum":
+            result = analyze_eth_wallet(address)
+            return JSONResponse(content=result)
+        else:
+            # Neo N3 - use graph orchestrator
+            from src.graph_orchestrator import analyze_wallet
+            result = await analyze_wallet(address, lookback_days)
+            return JSONResponse(content=result)
+            
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -971,6 +999,193 @@ async def speak_portfolio_endpoint(request: PortfolioRequest):
             "audio_data": audio_to_base64(audio),
             "portfolio_analysis": portfolio_dict,
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Neo N3 Smart Contract Endpoints
+# =============================================================================
+
+class ContractRiskRequest(BaseModel):
+    """Request to store risk on-chain."""
+    address: str
+    score: Optional[int] = None  # If None, will calculate automatically
+
+
+class ContractConfig(BaseModel):
+    """Contract configuration."""
+    contract_hash: Optional[str] = None
+    api_url: Optional[str] = None
+
+
+@app.get("/api/v2/contract/info")
+async def get_contract_info():
+    """
+    Get information about the deployed Wallet Risk Oracle contract.
+    """
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        
+        if not os.path.exists(config_path):
+            return JSONResponse(content={
+                "deployed": False,
+                "message": "Contract not yet deployed. Run: python contracts/deploy.py"
+            })
+        
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        contract_hash = config.get("contract_hash")
+        if not contract_hash:
+            return JSONResponse(content={
+                "deployed": False,
+                "message": "Contract hash not found in config"
+            })
+        
+        return JSONResponse(content={
+            "deployed": True,
+            "contract_hash": contract_hash,
+            "network": "neo3-testnet",
+            "explorer_url": f"https://testnet.neotube.io/contract/{contract_hash}",
+            "features": [
+                "Oracle-based risk score fetching",
+                "On-chain risk score storage",
+                "Risk level classification",
+                "Admin manual score updates"
+            ],
+            "methods": [
+                "request_risk_score(address)",
+                "get_risk_score(address)",
+                "get_last_update(address)",
+                "is_risky(address, threshold)",
+                "set_risk_score_manual(address, score)"
+            ]
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v2/contract/score/{address}")
+async def get_onchain_risk_score(address: str):
+    """
+    Get the on-chain risk score for an address from the Neo N3 contract.
+    
+    Returns the cached risk score stored in the smart contract.
+    Returns -1 if no score has been recorded yet.
+    """
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        
+        if not os.path.exists(config_path):
+            raise HTTPException(
+                status_code=400, 
+                detail="Contract not deployed. Run: python contracts/deploy.py"
+            )
+        
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        contract_hash = config.get("contract_hash")
+        if not contract_hash:
+            raise HTTPException(status_code=400, detail="Contract hash not found")
+        
+        # Query the contract using RPC
+        from src.neo_client import NeoClient
+        
+        neo = NeoClient()
+        
+        # Call get_risk_score method
+        result = neo.invoke_function(
+            contract_hash,
+            "get_risk_score",
+            [{"type": "String", "value": address}]
+        )
+        
+        if result is None:
+            raise HTTPException(status_code=500, detail="Failed to query contract")
+        
+        score = int(result.get("stack", [{}])[0].get("value", -1))
+        
+        # Get last update block
+        update_result = neo.invoke_function(
+            contract_hash,
+            "get_last_update",
+            [{"type": "String", "value": address}]
+        )
+        
+        last_update = 0
+        if update_result:
+            last_update = int(update_result.get("stack", [{}])[0].get("value", 0))
+        
+        # Determine risk level
+        if score >= 80:
+            risk_level = "LOW"
+        elif score >= 60:
+            risk_level = "MEDIUM"
+        elif score >= 40:
+            risk_level = "HIGH"
+        elif score >= 0:
+            risk_level = "CRITICAL"
+        else:
+            risk_level = "UNKNOWN"
+        
+        return JSONResponse(content={
+            "address": address,
+            "onchain_score": score,
+            "risk_level": risk_level,
+            "last_update_block": last_update,
+            "contract_hash": contract_hash,
+            "source": "neo3-contract"
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/contract/request-oracle/{address}")
+async def request_oracle_risk_score(address: str):
+    """
+    Request the Oracle to fetch and store a risk score for an address.
+    
+    This triggers an Oracle request on the Neo N3 blockchain.
+    The Oracle will call the wallet-guardian API and store the result on-chain.
+    
+    NOTE: Requires GAS for the transaction.
+    """
+    try:
+        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        
+        if not os.path.exists(config_path):
+            raise HTTPException(
+                status_code=400, 
+                detail="Contract not deployed. Run: python contracts/deploy.py"
+            )
+        
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        contract_hash = config.get("contract_hash")
+        if not contract_hash:
+            raise HTTPException(status_code=400, detail="Contract hash not found")
+        
+        return JSONResponse(content={
+            "status": "info",
+            "message": "Oracle requests must be submitted via a signed transaction",
+            "contract_hash": contract_hash,
+            "method": "request_risk_score",
+            "params": [{"type": "String", "value": address}],
+            "gas_required": "1.0 GAS (for Oracle response)",
+            "instructions": [
+                "1. Connect wallet to Neo N3 Testnet",
+                "2. Call request_risk_score(address) on the contract",
+                "3. Oracle will fetch score from API and store on-chain",
+                "4. Query with GET /api/v2/contract/score/{address}"
+            ]
+        })
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

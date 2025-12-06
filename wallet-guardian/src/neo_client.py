@@ -1,15 +1,80 @@
 """Minimal Neo N3 JSON-RPC client helpers."""
 
 import json
+import re
 import time
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .config import get_neo_rpc_url
 
 
 class NeoRPCError(RuntimeError):
     """Raised when RPC returns an error."""
+
+
+class InvalidAddressError(ValueError):
+    """Raised when an invalid address is provided."""
+
+
+def detect_chain(address: str) -> str:
+    """
+    Detect which blockchain an address belongs to.
+    
+    Args:
+        address: Wallet address string
+        
+    Returns:
+        Chain identifier: "neo3", "ethereum", or "unknown"
+    """
+    # Neo N3 addresses start with 'N' and are 34 characters
+    if address.startswith("N") and len(address) == 34:
+        return "neo3"
+    
+    # Ethereum addresses start with '0x' and are 42 characters (0x + 40 hex)
+    if address.startswith("0x") and len(address) == 42:
+        if re.match(r"^0x[a-fA-F0-9]{40}$", address):
+            return "ethereum"
+    
+    # Neo Legacy addresses start with 'A'
+    if address.startswith("A") and len(address) == 34:
+        return "neo_legacy"
+    
+    return "unknown"
+
+
+def validate_neo_address_format(address: str) -> Tuple[bool, str]:
+    """
+    Validate Neo N3 address format locally (without RPC).
+    
+    Args:
+        address: Address to validate
+        
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not address:
+        return False, "Address is empty"
+    
+    if not address.startswith("N"):
+        chain = detect_chain(address)
+        if chain == "ethereum":
+            return False, f"This is an Ethereum address (0x...). Neo Wallet Guardian only supports Neo N3 addresses (starting with 'N')"
+        elif chain == "neo_legacy":
+            return False, f"This appears to be a Neo Legacy address (starting with 'A'). Please use a Neo N3 address (starting with 'N')"
+        else:
+            return False, f"Invalid address format. Neo N3 addresses start with 'N' and are 34 characters long"
+    
+    if len(address) != 34:
+        return False, f"Invalid Neo N3 address length: {len(address)} (expected 34)"
+    
+    # Basic Base58 character check
+    base58_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    for char in address:
+        if char not in base58_chars:
+            return False, f"Invalid character '{char}' in address. Neo addresses use Base58 encoding"
+    
+    return True, ""
 
 
 class NeoClient:
@@ -35,6 +100,39 @@ class NeoClient:
         if "error" in parsed:
             raise NeoRPCError(parsed["error"])
         return parsed.get("result")
+
+    def validate_address(self, address: str) -> Dict[str, Any]:
+        """
+        Validate a Neo N3 address using the RPC.
+        
+        Args:
+            address: Address to validate
+            
+        Returns:
+            Dict with 'address' and 'isvalid' keys
+        """
+        # First do local format check
+        is_valid, error_msg = validate_neo_address_format(address)
+        if not is_valid:
+            return {
+                "address": address,
+                "isvalid": False,
+                "error": error_msg,
+                "chain": detect_chain(address),
+            }
+        
+        # Then verify with RPC
+        try:
+            result = self._rpc("validateaddress", [address])
+            result["chain"] = "neo3"
+            return result
+        except NeoRPCError as e:
+            return {
+                "address": address,
+                "isvalid": False,
+                "error": str(e),
+                "chain": "neo3",
+            }
 
     def get_nep17_balances(self, address: str) -> List[Dict[str, Any]]:
         """Return balances for an address."""

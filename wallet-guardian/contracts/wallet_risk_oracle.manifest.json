@@ -1,0 +1,185 @@
+{
+    "name": "wallet_risk_oracle",
+    "groups": [],
+    "abi": {
+        "methods": [
+            {
+                "name": "_deploy",
+                "offset": 1188,
+                "parameters": [
+                    {
+                        "type": "Any",
+                        "name": "data"
+                    },
+                    {
+                        "type": "Boolean",
+                        "name": "update"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Void"
+            },
+            {
+                "name": "set_api_url",
+                "offset": 309,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "new_url"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "get_api_url",
+                "offset": 344,
+                "parameters": [],
+                "safe": false,
+                "returntype": "String"
+            },
+            {
+                "name": "get_owner",
+                "offset": 440,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Hash160"
+            },
+            {
+                "name": "request_risk_score",
+                "offset": 485,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "oracle_callback",
+                "offset": 651,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "url"
+                    },
+                    {
+                        "type": "ByteArray",
+                        "name": "user_data"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "code"
+                    },
+                    {
+                        "type": "ByteArray",
+                        "name": "result"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Void"
+            },
+            {
+                "name": "get_risk_score",
+                "offset": 883,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "get_last_update",
+                "offset": 963,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "is_risky",
+                "offset": 1002,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "address"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "threshold"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "get_total_requests",
+                "offset": 1020,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "set_risk_score_manual",
+                "offset": 1057,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "address"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "score"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "verify",
+                "offset": 1182,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Boolean"
+            }
+        ],
+        "events": [
+            {
+                "name": "notify",
+                "parameters": [
+                    {
+                        "name": "state",
+                        "type": "Any"
+                    }
+                ]
+            }
+        ]
+    },
+    "permissions": [
+        {
+            "contract": "0xfe924b7cfe89ddd271abaf7210a80a7e11178758",
+            "methods": [
+                "request"
+            ]
+        },
+        {
+            "contract": "0xda65b600f7124ce6c79950c1772a36403104f2be",
+            "methods": [
+                "currentIndex"
+            ]
+        }
+    ],
+    "trusts": [],
+    "features": {},
+    "supportedstandards": [],
+    "extra": null
+}

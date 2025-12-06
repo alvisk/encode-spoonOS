@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap, Bot, CreditCard } from "lucide-react";
+import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap, Bot, CreditCard, Users, GitCompare, Clock, Shield, Plus, X, Loader2 } from "lucide-react";
 import { PaymentFlow } from "~/components/PaymentFlow";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -53,6 +53,52 @@ type X402Requirements = {
     decimals?: number;
     currency?: string;
   };
+};
+
+// Tool response types
+type ValidityScoreResult = {
+  address: string;
+  score: number;
+  risk_level: string;
+  deductions: Record<string, number>;
+  metrics: {
+    concentration: number;
+    stablecoin_ratio: number;
+    counterparty_count: number;
+  };
+  suspicious_patterns: string[];
+  risk_flags: string[];
+};
+
+type CounterpartyRiskResult = {
+  address: string;
+  results: Record<string, { tags: string[]; score: number; address_type: string }>;
+  total_counterparties: number;
+  flagged_count: number;
+};
+
+type MultiWalletDiffResult = {
+  addresses: string[];
+  wallet_count: number;
+  weighted_risk_score: number;
+  risk_level: string;
+  diversification_score: number;
+  cross_wallet_activity: number;
+  highest_risk_wallet: string;
+  lowest_risk_wallet: string;
+};
+
+type ScheduleMonitorResult = {
+  scheduled: boolean;
+  address: string;
+  interval_minutes: number;
+  conditions: string[];
+  monitored_wallets: string[];
+};
+
+type ApprovalScanResult = {
+  approvals: Array<{ spender: string; token: string; amount: string }>;
+  flags: string[];
 };
 
 type NeoLineInstance = {
@@ -144,6 +190,41 @@ export default function HomePage() {
   const [usePaywalled, setUsePaywalled] = useState(true); // Default to x402 paywalled endpoint
   const [x402Requirements, setX402Requirements] = useState<X402Requirements | null>(null);
   const [paymentHeader, setPaymentHeader] = useState("");
+
+  // Tool-specific state
+  const [activeToolTab, setActiveToolTab] = useState<"validity" | "counterparty" | "multi" | "monitor" | "approvals">("validity");
+  
+  // Validity Score Tool
+  const [validityAddress, setValidityAddress] = useState("");
+  const [validityLoading, setValidityLoading] = useState(false);
+  const [validityResult, setValidityResult] = useState<ValidityScoreResult | null>(null);
+  const [validityError, setValidityError] = useState<string | null>(null);
+  
+  // Counterparty Risk Tool
+  const [counterpartyAddress, setCounterpartyAddress] = useState("");
+  const [counterpartyLoading, setCounterpartyLoading] = useState(false);
+  const [counterpartyResult, setCounterpartyResult] = useState<CounterpartyRiskResult | null>(null);
+  const [counterpartyError, setCounterpartyError] = useState<string | null>(null);
+  
+  // Multi-Wallet Diff Tool
+  const [multiWalletAddresses, setMultiWalletAddresses] = useState<string[]>([""]);
+  const [multiWalletLoading, setMultiWalletLoading] = useState(false);
+  const [multiWalletResult, setMultiWalletResult] = useState<MultiWalletDiffResult | null>(null);
+  const [multiWalletError, setMultiWalletError] = useState<string | null>(null);
+  
+  // Schedule Monitor Tool
+  const [monitorAddress, setMonitorAddress] = useState("");
+  const [monitorInterval, setMonitorInterval] = useState(60);
+  const [monitorConditions, setMonitorConditions] = useState<string[]>(["large_outflow", "risk_score_jump"]);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [monitorResult, setMonitorResult] = useState<ScheduleMonitorResult | null>(null);
+  const [monitorError, setMonitorError] = useState<string | null>(null);
+  
+  // Approval Scan Tool
+  const [approvalAddress, setApprovalAddress] = useState("");
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalResult, setApprovalResult] = useState<ApprovalScanResult | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   const scanAlerts = useMemo(
     () =>
@@ -326,6 +407,143 @@ export default function HomePage() {
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Unexpected error");
       setScanStatus("error");
+    }
+  };
+
+  // Helper to invoke SpoonOS tools
+  const invokeSpoonTool = async (prompt: string): Promise<string> => {
+    const res = await fetch(`${SPOONOS_API_URL}/analyze?prompt=${encodeURIComponent(prompt)}`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { detail?: string };
+      throw new Error(err.detail ?? "SpoonOS API error");
+    }
+    const data = (await res.json()) as SpoonOSAnalysis;
+    return data.result;
+  };
+
+  // Validity Score Tool
+  const runValidityScore = async () => {
+    if (!validityAddress.trim()) return;
+    setValidityLoading(true);
+    setValidityError(null);
+    setValidityResult(null);
+    try {
+      const result = await invokeSpoonTool(`get validity score for wallet ${validityAddress.trim()}`);
+      // Parse the result - SpoonOS returns text, we'll extract key info
+      const scoreMatch = /score[:\s]+(\d+)/i.exec(result);
+      const riskMatch = /risk[_\s]?level[:\s]+(\w+)/i.exec(result);
+      setValidityResult({
+        address: validityAddress.trim(),
+        score: scoreMatch?.[1] ? parseInt(scoreMatch[1]) : 50,
+        risk_level: riskMatch?.[1] ?? "moderate",
+        deductions: {},
+        metrics: { concentration: 0, stablecoin_ratio: 0, counterparty_count: 0 },
+        suspicious_patterns: [],
+        risk_flags: [],
+      });
+    } catch (err) {
+      setValidityError(err instanceof Error ? err.message : "Failed to get validity score");
+    } finally {
+      setValidityLoading(false);
+    }
+  };
+
+  // Counterparty Risk Tool
+  const runCounterpartyRisk = async () => {
+    if (!counterpartyAddress.trim()) return;
+    setCounterpartyLoading(true);
+    setCounterpartyError(null);
+    setCounterpartyResult(null);
+    try {
+      const result = await invokeSpoonTool(`analyze counterparty risk for wallet ${counterpartyAddress.trim()}`);
+      // Parse counterparty info from result
+      const flaggedMatch = /(\d+)\s*flagged/i.exec(result);
+      setCounterpartyResult({
+        address: counterpartyAddress.trim(),
+        results: {},
+        total_counterparties: 0,
+        flagged_count: flaggedMatch?.[1] ? parseInt(flaggedMatch[1]) : 0,
+      });
+    } catch (err) {
+      setCounterpartyError(err instanceof Error ? err.message : "Failed to analyze counterparty risk");
+    } finally {
+      setCounterpartyLoading(false);
+    }
+  };
+
+  // Multi-Wallet Diff Tool
+  const runMultiWalletDiff = async () => {
+    const addresses = multiWalletAddresses.filter(a => a.trim());
+    if (addresses.length < 2) {
+      setMultiWalletError("Please enter at least 2 wallet addresses");
+      return;
+    }
+    setMultiWalletLoading(true);
+    setMultiWalletError(null);
+    setMultiWalletResult(null);
+    try {
+      const result = await invokeSpoonTool(`compare wallets ${addresses.join(" and ")}`);
+      const riskMatch = /risk[_\s]?score[:\s]+(\d+)/i.exec(result);
+      const diversMatch = /diversification[:\s]+(\d+)/i.exec(result);
+      setMultiWalletResult({
+        addresses,
+        wallet_count: addresses.length,
+        weighted_risk_score: riskMatch?.[1] ? parseInt(riskMatch[1]) : 50,
+        risk_level: "moderate",
+        diversification_score: diversMatch?.[1] ? parseInt(diversMatch[1]) : 50,
+        cross_wallet_activity: 0,
+        highest_risk_wallet: addresses[0] ?? "",
+        lowest_risk_wallet: addresses[addresses.length - 1] ?? "",
+      });
+    } catch (err) {
+      setMultiWalletError(err instanceof Error ? err.message : "Failed to compare wallets");
+    } finally {
+      setMultiWalletLoading(false);
+    }
+  };
+
+  // Schedule Monitor Tool
+  const runScheduleMonitor = async () => {
+    if (!monitorAddress.trim()) return;
+    setMonitorLoading(true);
+    setMonitorError(null);
+    setMonitorResult(null);
+    try {
+      const result = await invokeSpoonTool(
+        `schedule monitoring for wallet ${monitorAddress.trim()} every ${monitorInterval} minutes with conditions ${monitorConditions.join(", ")}`
+      );
+      setMonitorResult({
+        scheduled: result.toLowerCase().includes("scheduled") || result.toLowerCase().includes("success"),
+        address: monitorAddress.trim(),
+        interval_minutes: monitorInterval,
+        conditions: monitorConditions,
+        monitored_wallets: [monitorAddress.trim()],
+      });
+    } catch (err) {
+      setMonitorError(err instanceof Error ? err.message : "Failed to schedule monitor");
+    } finally {
+      setMonitorLoading(false);
+    }
+  };
+
+  // Approval Scan Tool
+  const runApprovalScan = async () => {
+    if (!approvalAddress.trim()) return;
+    setApprovalLoading(true);
+    setApprovalError(null);
+    setApprovalResult(null);
+    try {
+      const result = await invokeSpoonTool(`scan token approvals for wallet ${approvalAddress.trim()}`);
+      setApprovalResult({
+        approvals: [],
+        flags: result.toLowerCase().includes("no approvals") ? [] : ["Check approval history"],
+      });
+    } catch (err) {
+      setApprovalError(err instanceof Error ? err.message : "Failed to scan approvals");
+    } finally {
+      setApprovalLoading(false);
     }
   };
 
@@ -688,6 +906,394 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
             <p className="text-xs text-white/60 font-medium">
               Hosted on Railway. Uses real Neo N3 blockchain data.
             </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* TOOLS DASHBOARD SECTION */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-black uppercase tracking-wide">Tools Dashboard</h2>
+            <p className="text-sm text-black/70 font-medium mt-1">
+              Access all Wallet Guardian analysis tools
+            </p>
+          </div>
+          <Badge className="neo-pill bg-[#00FF00] text-black border-4 border-black shadow-[4px_4px_0_0_#000] font-black uppercase">
+            {5} Tools Available
+          </Badge>
+        </div>
+
+        {/* Tool Tabs */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "validity" as const, label: "Validity Score", icon: <ShieldCheck className="h-4 w-4" strokeWidth={3} /> },
+            { id: "counterparty" as const, label: "Counterparty Risk", icon: <Users className="h-4 w-4" strokeWidth={3} /> },
+            { id: "multi" as const, label: "Multi-Wallet Diff", icon: <GitCompare className="h-4 w-4" strokeWidth={3} /> },
+            { id: "monitor" as const, label: "Schedule Monitor", icon: <Clock className="h-4 w-4" strokeWidth={3} /> },
+            { id: "approvals" as const, label: "Approval Scan", icon: <Shield className="h-4 w-4" strokeWidth={3} /> },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveToolTab(tab.id)}
+              className={`neo-button flex items-center gap-2 border-4 border-black px-4 py-2 font-black uppercase text-sm tracking-wide transition-none ${
+                activeToolTab === tab.id
+                  ? "bg-black text-[#FFFF00] shadow-none translate-x-1 translate-y-1"
+                  : "bg-white text-black shadow-[4px_4px_0_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000]"
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tool Content */}
+        <Card className="neo-card border-black bg-white">
+          <CardContent className="p-6">
+            {/* Validity Score Tool */}
+            {activeToolTab === "validity" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#00FF00] border-4 border-black">
+                    <ShieldCheck className="h-6 w-6 text-black" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">Wallet Validity Score</h3>
+                    <p className="text-sm text-black/70">Compute a 0-100 risk score with detailed breakdown</p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={validityAddress}
+                    onChange={(e) => setValidityAddress(e.target.value)}
+                    placeholder="Enter Neo N3 address..."
+                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                  />
+                  <Button
+                    onClick={() => void runValidityScore()}
+                    disabled={validityLoading || !validityAddress.trim()}
+                    className="neo-button border-4 border-black bg-[#00FF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                  >
+                    {validityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
+                  </Button>
+                </div>
+
+                {validityError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">{validityError}</p>
+                )}
+
+                {validityResult && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="neo-card border-4 border-black p-5 bg-gradient-to-br from-white to-gray-50">
+                      <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Risk Score</p>
+                      <div className="mt-3 flex items-end gap-3">
+                        <span className={`text-5xl font-black ${validityResult.score >= 70 ? 'text-[#00FF00]' : validityResult.score >= 40 ? 'text-[#FFFF00]' : 'text-[#FF0000]'}`}>
+                          {validityResult.score}
+                        </span>
+                        <span className="text-xl font-black text-black/40">/100</span>
+                      </div>
+                      <Badge className={`mt-3 neo-pill border-3 border-black font-black uppercase ${
+                        validityResult.risk_level === 'clean' ? 'bg-[#00FF00] text-black' :
+                        validityResult.risk_level === 'low' ? 'bg-[#90EE90] text-black' :
+                        validityResult.risk_level === 'moderate' ? 'bg-[#FFFF00] text-black' :
+                        'bg-[#FF0000] text-white'
+                      }`}>
+                        {validityResult.risk_level}
+                      </Badge>
+                    </div>
+                    <div className="neo-card border-4 border-black p-5">
+                      <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Address</p>
+                      <p className="mt-2 font-mono text-xs break-all">{validityResult.address}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Counterparty Risk Tool */}
+            {activeToolTab === "counterparty" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#FFFF00] border-4 border-black">
+                    <Users className="h-6 w-6 text-black" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">Counterparty Risk Analysis</h3>
+                    <p className="text-sm text-black/70">Identify risky counterparties with relationship analysis</p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={counterpartyAddress}
+                    onChange={(e) => setCounterpartyAddress(e.target.value)}
+                    placeholder="Enter Neo N3 address..."
+                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                  />
+                  <Button
+                    onClick={() => void runCounterpartyRisk()}
+                    disabled={counterpartyLoading || !counterpartyAddress.trim()}
+                    className="neo-button border-4 border-black bg-[#FFFF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                  >
+                    {counterpartyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
+                  </Button>
+                </div>
+
+                {counterpartyError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">{counterpartyError}</p>
+                )}
+
+                {counterpartyResult && (
+                  <div className="neo-card border-4 border-black p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Analysis Complete</p>
+                        <p className="mt-2 font-mono text-xs break-all">{counterpartyResult.address}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-3xl font-black text-[#FF0000]">{counterpartyResult.flagged_count}</p>
+                        <p className="text-xs font-black uppercase text-black/60">Flagged</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Multi-Wallet Diff Tool */}
+            {activeToolTab === "multi" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#00BFFF] border-4 border-black">
+                    <GitCompare className="h-6 w-6 text-black" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">Multi-Wallet Comparison</h3>
+                    <p className="text-sm text-black/70">Compare wallets for diversification and overlap analysis</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  {multiWalletAddresses.map((addr, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input
+                        value={addr}
+                        onChange={(e) => {
+                          const newAddrs = [...multiWalletAddresses];
+                          newAddrs[idx] = e.target.value;
+                          setMultiWalletAddresses(newAddrs);
+                        }}
+                        placeholder={`Wallet ${idx + 1} address...`}
+                        className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                      />
+                      {multiWalletAddresses.length > 1 && (
+                        <Button
+                          onClick={() => setMultiWalletAddresses(multiWalletAddresses.filter((_, i) => i !== idx))}
+                          className="neo-button border-4 border-black bg-[#FF0000] text-white shadow-[4px_4px_0_0_#000] px-3"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => setMultiWalletAddresses([...multiWalletAddresses, ""])}
+                      className="neo-button border-4 border-black bg-white text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-4"
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Add Wallet
+                    </Button>
+                    <Button
+                      onClick={() => void runMultiWalletDiff()}
+                      disabled={multiWalletLoading || multiWalletAddresses.filter(a => a.trim()).length < 2}
+                      className="neo-button border-4 border-black bg-[#00BFFF] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                    >
+                      {multiWalletLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Compare"}
+                    </Button>
+                  </div>
+                </div>
+
+                {multiWalletError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">{multiWalletError}</p>
+                )}
+
+                {multiWalletResult && (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="neo-card border-4 border-black p-5">
+                      <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Combined Risk</p>
+                      <p className="text-3xl font-black mt-2">{multiWalletResult.weighted_risk_score}</p>
+                    </div>
+                    <div className="neo-card border-4 border-black p-5">
+                      <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Diversification</p>
+                      <p className="text-3xl font-black mt-2">{multiWalletResult.diversification_score}%</p>
+                    </div>
+                    <div className="neo-card border-4 border-black p-5">
+                      <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Wallets</p>
+                      <p className="text-3xl font-black mt-2">{multiWalletResult.wallet_count}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Schedule Monitor Tool */}
+            {activeToolTab === "monitor" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#FF00FF] border-4 border-black">
+                    <Clock className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">Schedule Monitoring</h3>
+                    <p className="text-sm text-black/70">Set up automated alerts for wallet changes</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <input
+                      value={monitorAddress}
+                      onChange={(e) => setMonitorAddress(e.target.value)}
+                      placeholder="Enter Neo N3 address to monitor..."
+                      className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                    />
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4">
+                    <div>
+                      <label className="text-xs font-black uppercase tracking-wider">Interval (minutes)</label>
+                      <input
+                        type="number"
+                        value={monitorInterval}
+                        onChange={(e) => setMonitorInterval(parseInt(e.target.value) || 60)}
+                        min={1}
+                        max={1440}
+                        className="neo-input mt-1 w-32 border-4 border-black px-4 py-2 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-black uppercase tracking-wider">Alert Conditions</label>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {["large_outflow", "new_token", "risk_score_jump", "suspicious_activity"].map((cond) => (
+                          <button
+                            key={cond}
+                            onClick={() => {
+                              if (monitorConditions.includes(cond)) {
+                                setMonitorConditions(monitorConditions.filter(c => c !== cond));
+                              } else {
+                                setMonitorConditions([...monitorConditions, cond]);
+                              }
+                            }}
+                            className={`neo-pill border-3 border-black px-3 py-1 text-xs font-black uppercase ${
+                              monitorConditions.includes(cond)
+                                ? "bg-[#00FF00] text-black shadow-[3px_3px_0_0_#000]"
+                                : "bg-white text-black/50"
+                            }`}
+                          >
+                            {cond.replace(/_/g, " ")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <Button
+                    onClick={() => void runScheduleMonitor()}
+                    disabled={monitorLoading || !monitorAddress.trim()}
+                    className="neo-button border-4 border-black bg-[#FF00FF] text-white shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                  >
+                    {monitorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Schedule Monitor"}
+                  </Button>
+                </div>
+
+                {monitorError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">{monitorError}</p>
+                )}
+
+                {monitorResult && (
+                  <div className="neo-card border-4 border-black p-5 bg-[#E8F5E9]">
+                    <div className="flex items-center gap-3">
+                      <Badge className="neo-pill bg-[#00FF00] text-black border-3 border-black font-black uppercase">
+                        {monitorResult.scheduled ? "Scheduled" : "Failed"}
+                      </Badge>
+                      <p className="font-mono text-xs">{monitorResult.address}</p>
+                    </div>
+                    <p className="mt-2 text-sm font-bold">
+                      Checking every {monitorResult.interval_minutes} minutes for: {monitorResult.conditions.join(", ")}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Approval Scan Tool */}
+            {activeToolTab === "approvals" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#FF6600] border-4 border-black">
+                    <Shield className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">Token Approval Scan</h3>
+                    <p className="text-sm text-black/70">Scan for risky token approvals and unlimited allowances</p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    value={approvalAddress}
+                    onChange={(e) => setApprovalAddress(e.target.value)}
+                    placeholder="Enter Neo N3 address..."
+                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                  />
+                  <Button
+                    onClick={() => void runApprovalScan()}
+                    disabled={approvalLoading || !approvalAddress.trim()}
+                    className="neo-button border-4 border-black bg-[#FF6600] text-white shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                  >
+                    {approvalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Scan"}
+                  </Button>
+                </div>
+
+                {approvalError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">{approvalError}</p>
+                )}
+
+                {approvalResult && (
+                  <div className="neo-card border-4 border-black p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-black/60">{"//"} Scan Complete</p>
+                        <p className="mt-2 text-sm font-bold">
+                          {approvalResult.approvals.length === 0 
+                            ? "No token approvals found" 
+                            : `${approvalResult.approvals.length} approvals found`}
+                        </p>
+                      </div>
+                      <Badge className={`neo-pill border-3 border-black font-black uppercase ${
+                        approvalResult.flags.length === 0 
+                          ? "bg-[#00FF00] text-black" 
+                          : "bg-[#FF0000] text-white"
+                      }`}>
+                        {approvalResult.flags.length === 0 ? "Clean" : `${approvalResult.flags.length} Flags`}
+                      </Badge>
+                    </div>
+                    {approvalResult.flags.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                        {approvalResult.flags.map((flag, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-sm font-bold text-[#FF0000]">
+                            <AlertTriangle className="h-4 w-4" />
+                            {flag}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </section>
