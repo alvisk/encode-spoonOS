@@ -1,13 +1,13 @@
 """Stub tool for scheduled wallet monitoring and alerts."""
 
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 from spoon_ai.tools import BaseTool
 
 
 class ScheduleMonitorTool(BaseTool):
-    name = "schedule_monitor"
-    description = "Schedule wallet rechecks and emit alerts on changes."
-    parameters = {
+    name: ClassVar[str] = "schedule_monitor"
+    description: ClassVar[str] = "Schedule wallet rechecks and emit alerts on changes."
+    parameters: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "address": {"type": "string"},

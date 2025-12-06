@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from spoon_ai.tools import BaseTool
 
@@ -40,9 +40,9 @@ def _extract_counterparties(transfers: Dict[str, Any]) -> List[str]:
 
 
 class GetWalletSummaryTool(BaseTool):
-    name = "get_wallet_summary"
-    description = "Fetch balances and transfers for a wallet on Neo N3 and compute simple risk metrics."
-    parameters = {
+    name: ClassVar[str] = "get_wallet_summary"
+    description: ClassVar[str] = "Fetch balances and transfers for a wallet on Neo N3 and compute simple risk metrics."
+    parameters: ClassVar[Dict[str, Any]] = {
         "type": "object",
         "properties": {
             "address": {"type": "string", "description": "Neo N3 address (scripthash format)"},

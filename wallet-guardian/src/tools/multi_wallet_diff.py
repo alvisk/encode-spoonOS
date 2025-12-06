@@ -1,13 +1,13 @@
 """Stub tool for comparing multiple wallets."""
 
-from typing import List
+from typing import ClassVar, List
 from spoon_ai.tools import BaseTool
 
 
 class MultiWalletDiffTool(BaseTool):
-    name = "multi_wallet_diff"
-    description = "Compare wallets for diversification/overlap."
-    parameters = {
+    name: ClassVar[str] = "multi_wallet_diff"
+    description: ClassVar[str] = "Compare wallets for diversification/overlap."
+    parameters: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "addresses": {

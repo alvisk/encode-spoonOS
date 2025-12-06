@@ -1,12 +1,13 @@
 """Stub tool for approvals/allowances scanning."""
 
+from typing import ClassVar
 from spoon_ai.tools import BaseTool
 
 
 class ApprovalScanTool(BaseTool):
-    name = "approval_scan"
-    description = "Scan approvals/allowances and flag unlimited or risky approvals."
-    parameters = {
+    name: ClassVar[str] = "approval_scan"
+    description: ClassVar[str] = "Scan approvals/allowances and flag unlimited or risky approvals."
+    parameters: ClassVar[dict] = {
         "type": "object",
         "properties": {"address": {"type": "string"}},
         "required": ["address"],

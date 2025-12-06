@@ -1,6 +1,6 @@
 """Tool to compute a simple wallet validity/risk score on Neo N3."""
 
-from typing import Dict, Any
+from typing import Any, ClassVar, Dict
 
 from spoon_ai.tools import BaseTool
 
@@ -13,11 +13,11 @@ from .get_wallet_summary import (
 
 
 class WalletValidityScoreTool(BaseTool):
-    name = "wallet_validity_score"
-    description = (
+    name: ClassVar[str] = "wallet_validity_score"
+    description: ClassVar[str] = (
         "Compute a 0-100 validity/risk score for a Neo N3 wallet using balances/transfers."
     )
-    parameters = {
+    parameters: ClassVar[Dict[str, Any]] = {
         "type": "object",
         "properties": {
             "address": {"type": "string", "description": "Neo N3 address"},

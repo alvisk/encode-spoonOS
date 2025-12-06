@@ -1,6 +1,6 @@
 """Minimal agent scaffold wiring tool stubs into a ToolCallAgent."""
 
-from spoon_ai.agent import ToolCallAgent
+from spoon_ai.agents import ToolCallAgent
 
 from .tools import (
     ActionDraftTool,

@@ -1,13 +1,13 @@
 """Stub tool for drafting safe, non-advisory actions."""
 
-from typing import List
+from typing import ClassVar, List
 from spoon_ai.tools import BaseTool
 
 
 class ActionDraftTool(BaseTool):
-    name = "action_draft"
-    description = "Draft safe next-steps messaging (non-financial advice)."
-    parameters = {
+    name: ClassVar[str] = "action_draft"
+    description: ClassVar[str] = "Draft safe next-steps messaging (non-financial advice)."
+    parameters: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "summary": {"type": "string"},

@@ -1,13 +1,13 @@
 """Stub tool for counterparty risk labeling."""
 
-from typing import List
+from typing import ClassVar, List
 from spoon_ai.tools import BaseTool
 
 
 class FlagCounterpartyRiskTool(BaseTool):
-    name = "flag_counterparty_risk"
-    description = "Label counterparties with risk tags (blocklists, heuristics)."
-    parameters = {
+    name: ClassVar[str] = "flag_counterparty_risk"
+    description: ClassVar[str] = "Label counterparties with risk tags (blocklists, heuristics)."
+    parameters: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "address": {"type": "string", "description": "User wallet address"},
