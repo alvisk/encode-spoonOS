@@ -18,3 +18,6 @@ def ready() -> dict[str, str]:
     # Extend with dependency checks (RPC, storage, etc.) when implemented.
     return {"status": "ready"}
 
+
+
+

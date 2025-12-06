@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap, Bot } from "lucide-react";
+import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap, Bot, CreditCard } from "lucide-react";
+import { PaymentFlow } from "~/components/PaymentFlow";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -39,6 +40,20 @@ type SpoonOSAnalysis = {
   agent: string;
   prompt: string;
   response: string;
+};
+
+// x402 payment requirements type
+type X402Requirements = {
+  scheme: string;
+  network: string;
+  maxAmountRequired: string;
+  payTo: string;
+  asset: string;
+  extra?: {
+    name?: string;
+    decimals?: number;
+    currency?: string;
+  };
 };
 
 type NeoLineInstance = {
@@ -121,12 +136,15 @@ export default function HomePage() {
 
   const [scanAddress, setScanAddress] = useState("");
   const [scanStatus, setScanStatus] = useState<
-    "idle" | "loading" | "error" | "done"
+    "idle" | "loading" | "error" | "done" | "payment_required"
   >("idle");
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanWallet, setScanWallet] = useState<Wallet | null>(null);
   const [scanActivity, setScanActivity] = useState<Activity[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<SpoonOSAnalysis | null>(null);
+  const [usePaywalled, setUsePaywalled] = useState(false);
+  const [x402Requirements, setX402Requirements] = useState<X402Requirements | null>(null);
+  const [paymentHeader, setPaymentHeader] = useState("");
 
   const scanAlerts = useMemo(
     () =>
@@ -193,14 +211,50 @@ export default function HomePage() {
     setScanStatus("loading");
     setScanError(null);
     setAiAnalysis(null);
+    setX402Requirements(null);
     
     try {
-      // Call the SpoonOS API for AI-powered analysis
-      const prompt = encodeURIComponent(`analyze wallet ${scanAddress.trim()}`);
-      const spoonRes = await fetch(
-        `${SPOONOS_API_URL}/analyze?prompt=${prompt}`,
-        { method: "POST" }
-      );
+      let spoonRes: Response;
+      
+      if (usePaywalled) {
+        // Use the x402 paywalled endpoint
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+        
+        // Add payment header if provided
+        if (paymentHeader.trim()) {
+          headers["X-PAYMENT"] = paymentHeader.trim();
+        }
+        
+        spoonRes = await fetch(
+          `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              prompt: `analyze wallet ${scanAddress.trim()}`,
+            }),
+          }
+        );
+        
+        // Handle 402 Payment Required
+        if (spoonRes.status === 402) {
+          const paymentData = await spoonRes.json() as { accepts?: X402Requirements[] };
+          if (paymentData.accepts && paymentData.accepts.length > 0) {
+            setX402Requirements(paymentData.accepts[0] ?? null);
+          }
+          setScanStatus("payment_required");
+          return;
+        }
+      } else {
+        // Use the free endpoint
+        const prompt = encodeURIComponent(`analyze wallet ${scanAddress.trim()}`);
+        spoonRes = await fetch(
+          `${SPOONOS_API_URL}/analyze?prompt=${prompt}`,
+          { method: "POST" }
+        );
+      }
 
       if (!spoonRes.ok) {
         const err = (await spoonRes.json().catch(() => ({}))) as {
@@ -344,6 +398,65 @@ export default function HomePage() {
                 </p>
               ) : null}
             </div>
+
+            {/* PAYWALLED ENDPOINT TOGGLE */}
+            <div className="flex flex-col gap-4 p-5 border-4 border-black bg-[#1a1a2e] shadow-[6px_6px_0_0_#FFFF00]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-[#FFFF00] rounded border-2 border-black">
+                    <CreditCard className="h-5 w-5 text-black" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-[#FFFF00] uppercase tracking-wider">
+                      x402 Paywalled Mode
+                    </p>
+                    <p className="text-xs text-white/60">
+                      Use the monetized endpoint (0.01 USDC/call on Base Sepolia)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setUsePaywalled(!usePaywalled)}
+                  className={`relative w-14 h-8 rounded-none border-4 border-black transition-colors ${
+                    usePaywalled ? 'bg-[#00FF00]' : 'bg-white/20'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-5 h-5 bg-black transition-transform ${
+                      usePaywalled ? 'left-7' : 'left-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              {usePaywalled && scanStatus !== "payment_required" && (
+                <div className="pt-3 border-t border-white/20">
+                  <p className="text-xs text-white/50">
+                    When you scan a wallet, you&apos;ll be prompted to pay with your connected wallet.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* PAYMENT REQUIRED STATE - Click-through wallet payment flow */}
+            {scanStatus === "payment_required" && x402Requirements && (
+              <PaymentFlow
+                requirements={x402Requirements}
+                onPaymentComplete={(signedPaymentHeader) => {
+                  // After user signs authorization, set the x402 payment header and retry
+                  setPaymentHeader(signedPaymentHeader);
+                  // Auto-retry the scan with the signed payment proof
+                  setTimeout(() => {
+                    void runSelfScan();
+                  }, 500);
+                }}
+                onCancel={() => {
+                  setScanStatus("idle");
+                  setX402Requirements(null);
+                  setUsePaywalled(false);
+                }}
+              />
+            )}
 
             {scanWallet ? (
               <>

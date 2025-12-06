@@ -3,6 +3,7 @@ import "~/styles/globals.css";
 import { type Metadata } from "next";
 import Script from "next/script";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { WalletProvider } from "~/components/WalletProvider";
 
 export const metadata: Metadata = {
   title: "ASSERTION OS",
@@ -37,7 +38,7 @@ export default function RootLayout({
         )}
       </head>
       <body className="min-h-screen bg-white text-black antialiased font-[family-name:var(--font-space-grotesk)]">
-        {children}
+        <WalletProvider>{children}</WalletProvider>
       </body>
     </html>
   );
