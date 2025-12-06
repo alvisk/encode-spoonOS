@@ -15,6 +15,7 @@ type NeoTransfer = {
   transferaddress?: string | null;
   amount?: string | number;
   blockindex?: number;
+  transfernotifyindex?: number;
 };
 
 async function rpcCall(method: string, params: unknown[], rpcUrl: string) {
@@ -70,7 +71,10 @@ export async function GET(_request: Request, { params }: ParamsPromise) {
         const displayAmount = amtRaw / 100_000_000;
         // Timestamp from Neo RPC is already in milliseconds
         const timestampMs = tx.timestamp ?? Date.now();
+        // Create unique ID by combining txhash, direction, asset, and notify index
+        const uniqueId = `${tx.txhash ?? "unknown"}-${direction}-${tx.assethash ?? ""}-${tx.transfernotifyindex ?? 0}`;
         return {
+          id: uniqueId,
           hash: tx.txhash ?? "unknown",
           type: direction === "send" ? "send" : "receive",
           tokenSymbol: ASSET_NAMES[tx.assethash ?? ""] ?? tx.assethash ?? "NEP-17",

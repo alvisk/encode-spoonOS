@@ -363,7 +363,7 @@ export default function HomePage() {
                       ) : (
                         scanActivity.slice(0, 4).map((tx) => (
                           <div
-                            key={tx.hash}
+                            key={tx.id ?? tx.hash}
                             className="flex items-center justify-between border-4 border-black bg-white px-4 py-3 shadow-[4px_4px_0_0_#000]"
                           >
                             <div>
@@ -709,7 +709,7 @@ $ python -m src.cli "explain risks for <addr>"`}
                 <div className="space-y-4">
                   {activities.map((tx) => (
                     <div
-                      key={tx.hash}
+                      key={tx.id ?? tx.hash}
                       className="neo-card border-black bg-[#F5F5F5] px-4 py-4 text-sm"
                     >
                       <div className="flex items-center justify-between">

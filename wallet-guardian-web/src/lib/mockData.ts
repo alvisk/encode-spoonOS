@@ -20,9 +20,11 @@ export type Alert = {
 };
 
 export type Activity = {
+  id?: string;
   hash: string;
   type: "send" | "receive" | "swap" | "approve";
   tokenSymbol: string;
+  amount?: number;
   amountUSD: number;
   chain: string;
   timestamp: string;
