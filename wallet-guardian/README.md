@@ -58,11 +58,30 @@ This project is currently a planning space for a SpoonOS hackathon build. The go
 - `src/neo_client.py`: minimal JSON-RPC client using `getnep17balances` and `getnep17transfers`.
 - `src/config.py`: env-driven RPC/API key accessors.
 
-Run locally (example):
+## Quickstart (CLI)
 ```bash
-export NEO_RPC_URL=https://testnet1.neo.coz.io:443
+cd wallet-guardian
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+export NEO_RPC_URL=https://testnet1.neo.coz.io:443  # or your RPC
 python -m src.cli "summarize wallet NhY...abc"
+
+# Offline / demo mode (uses fixture data)
+python -m src.cli --mock "summarize wallet NhY...abc"
 ```
+
+Config template: see `env.example`.
+
+### What works now
+- ToolCallAgent scaffold with real Neo RPC client.
+- `get_wallet_summary` fetches balances/transfers and computes simple risk flags; supports `--mock`/`WALLET_GUARDIAN_USE_MOCK` for demos.
+- `wallet_validity_score` wraps the summary and returns a 0–100 score with deductions.
+
+### Immediate next steps
+- Improve counterparty labeling (`FlagCounterpartyRiskTool`) using a local JSON blocklist/allowlist.
+- Add unit tests for risk metrics and mocked summary.
+- Capture a short terminal demo video using the CLI (mock and live).
+- Refine system prompt and add a short “Submission Details” section for the hackathon form.
 
 ## Implementation plan (phased)
 ### Phase 0 – Repo setup
