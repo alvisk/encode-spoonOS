@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap } from "lucide-react";
+import { AlertTriangle, BellRing, Radar, ShieldCheck, Zap, Bot } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -28,8 +28,18 @@ import {
   mockWallets,
 } from "~/lib/mockData";
 
+// SpoonOS API endpoint
+const SPOONOS_API_URL = "https://encode-spoonos-production.up.railway.app";
+
 type Wallet = (typeof mockWallets)[number];
 type Activity = NonNullable<(typeof mockActivityByAddress)[string]>[number];
+
+// SpoonOS API response type
+type SpoonOSAnalysis = {
+  agent: string;
+  prompt: string;
+  response: string;
+};
 
 type NeoLineInstance = {
   EVENT: { ACCOUNT_CHANGED: string };
@@ -116,6 +126,7 @@ export default function HomePage() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanWallet, setScanWallet] = useState<Wallet | null>(null);
   const [scanActivity, setScanActivity] = useState<Activity[]>([]);
+  const [aiAnalysis, setAiAnalysis] = useState<SpoonOSAnalysis | null>(null);
 
   const scanAlerts = useMemo(
     () =>
@@ -181,30 +192,57 @@ export default function HomePage() {
     if (!scanAddress.trim()) return;
     setScanStatus("loading");
     setScanError(null);
+    setAiAnalysis(null);
+    
     try {
+      // Call the SpoonOS API for AI-powered analysis
+      const prompt = encodeURIComponent(`analyze wallet ${scanAddress.trim()}`);
+      const spoonRes = await fetch(
+        `${SPOONOS_API_URL}/analyze?prompt=${prompt}`,
+        { method: "POST" }
+      );
+
+      if (!spoonRes.ok) {
+        const err = (await spoonRes.json().catch(() => ({}))) as {
+          detail?: string;
+        };
+        throw new Error(err.detail ?? "SpoonOS API error");
+      }
+
+      const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
+      setAiAnalysis(spoonData);
+
+      // Also fetch local wallet data for display
       const encoded = encodeURIComponent(scanAddress.trim());
       const [walletRes, activityRes] = await Promise.all([
         fetch(`/api/wallets/${encoded}`),
         fetch(`/api/wallets/${encoded}/activity`),
       ]);
 
-      if (!walletRes.ok) {
-        const err = (await walletRes.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(err.error ?? "Unable to fetch wallet");
+      if (walletRes.ok) {
+        const walletJson: unknown = await walletRes.json();
+        const walletData = walletJson as Wallet;
+        setScanWallet(walletData);
+      } else {
+        // Create a minimal wallet object from the address
+        setScanWallet({
+          address: scanAddress.trim(),
+          label: "Scanned Wallet",
+          balanceUSD: 0,
+          riskScore: 50,
+          chains: ["Neo N3"],
+          lastActive: new Date().toISOString(),
+          tags: [],
+        });
       }
 
-      const walletJson: unknown = await walletRes.json();
-      const activityJson: unknown = activityRes.ok
-        ? await activityRes.json()
-        : [];
+      if (activityRes.ok) {
+        const activityJson: unknown = await activityRes.json();
+        setScanActivity((activityJson as Activity[]) ?? []);
+      } else {
+        setScanActivity([]);
+      }
 
-      const walletData = walletJson as Wallet;
-      const activityData = (activityJson as Activity[]) ?? [];
-
-      setScanWallet(walletData);
-      setScanActivity(activityData ?? []);
       setScanStatus("done");
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Unexpected error");
@@ -309,6 +347,38 @@ export default function HomePage() {
 
             {scanWallet ? (
               <>
+                {/* AI ANALYSIS CARD - SpoonOS Response */}
+                {aiAnalysis ? (
+                  <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-[#FFFF00] rounded border-2 border-black">
+                        <Bot className="h-6 w-6 text-black" strokeWidth={3} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-[#FFFF00] uppercase tracking-widest">
+                          {"//"} SPOONOS AI ANALYSIS
+                        </p>
+                        <p className="text-xs text-white/60 font-mono">
+                          Agent: {aiAnalysis.agent}
+                        </p>
+                      </div>
+                      <Badge className="ml-auto neo-pill bg-[#00FF00] text-black border-2 border-black shadow-[3px_3px_0_0_#FFFF00] font-black uppercase text-xs">
+                        Live
+                      </Badge>
+                    </div>
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed text-white/90 font-medium">
+                        {aiAnalysis.response}
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-white/20">
+                      <p className="text-xs text-white/50 font-mono">
+                        Powered by SpoonOS x402 Gateway • Neo N3 Blockchain
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="grid gap-6 lg:grid-cols-2">
                   {/* WALLET INFO CARD */}
                   <div className="neo-card border-4 border-black bg-white p-5">
@@ -451,18 +521,30 @@ export default function HomePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-white pt-4">
-            <p className="font-black uppercase tracking-wide text-[#00FF00]">CLI Quickstart:</p>
+            <p className="font-black uppercase tracking-wide text-[#00FF00]">Live API:</p>
             <pre className="border-4 border-white/30 bg-black px-4 py-3 font-mono text-xs whitespace-pre-wrap shadow-[6px_6px_0_0_#FFFF00] text-[#00FF00]">
-              {`$ cd wallet-guardian
-$ python -m venv .venv && source .venv/bin/activate
-$ pip install -r requirements.txt
-$ export NEO_RPC_URL=https://testnet1.neo.coz.io:443
+              {`# Health Check
+curl ${SPOONOS_API_URL}/health
 
-$ python -m src.cli "summarize wallet <addr>"
-$ python -m src.cli "explain risks for <addr>"`}
+# Analyze Wallet
+curl -X POST "${SPOONOS_API_URL}/analyze?prompt=analyze%20wallet%20<addr>"
+
+# x402 Paywalled Endpoint
+curl ${SPOONOS_API_URL}/x402/requirements`}
             </pre>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Badge className="neo-pill bg-[#00FF00] text-black border-2 border-white/30 font-black text-xs">
+                Gemini AI
+              </Badge>
+              <Badge className="neo-pill bg-[#FFFF00] text-black border-2 border-white/30 font-black text-xs">
+                x402 Payments
+              </Badge>
+              <Badge className="neo-pill bg-[#00BFFF] text-black border-2 border-white/30 font-black text-xs">
+                Neo N3
+              </Badge>
+            </div>
             <p className="text-xs text-white/60 font-medium">
-              Returns balances, transfers, and risk flags. Use <code className="text-[#FFFF00]">--mock</code> for offline demos.
+              Hosted on Railway. Uses real Neo N3 blockchain data.
             </p>
           </CardContent>
         </Card>
