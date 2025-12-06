@@ -1,5 +1,10 @@
-"""Tool to fetch and summarize wallet data on Neo N3."""
+"""Tool to fetch and summarize wallet data on Neo N3.
 
+This module uses shared computation functions from graph_orchestrator to prevent
+redundant code. The UnifiedDataFetcher handles caching to avoid duplicate RPC calls.
+"""
+
+import asyncio
 import os
 import time
 from typing import Any, ClassVar, Dict, List, Optional
@@ -9,33 +14,43 @@ from spoon_ai.tools import BaseTool
 from ..neo_client import NeoClient, NeoRPCError
 
 
+# =============================================================================
+# SHARED COMPUTATION FUNCTIONS
+# These are the canonical implementations - used by graph_orchestrator too
+# =============================================================================
+
 def _compute_concentration(balances: List[Dict[str, Any]]) -> float:
+    """Compute portfolio concentration (0-1). Higher = more concentrated."""
     total = sum(float(b.get("amount", 0)) for b in balances)
     if total <= 0:
         return 0.0
-    top = max(float(b.get("amount", 0)) for b in balances) if balances else 0.0
+    top = max((float(b.get("amount", 0)) for b in balances), default=0.0)
     return top / total
 
 
 def _stablecoin_ratio(balances: List[Dict[str, Any]]) -> float:
+    """Compute ratio of stablecoins in portfolio."""
     total = sum(float(b.get("amount", 0)) for b in balances)
     if total <= 0:
         return 0.0
-    stable = 0.0
-    for b in balances:
-        symbol = (b.get("symbol") or "").upper()
-        if any(tag in symbol for tag in ("USD", "USDT", "USDC", "DAI", "FDUSD", "CUSDT")):
-            stable += float(b.get("amount", 0))
+    stable = sum(
+        float(b.get("amount", 0))
+        for b in balances
+        if any(tag in (b.get("symbol") or "").upper() 
+               for tag in ("USD", "USDT", "USDC", "DAI", "FDUSD", "CUSDT"))
+    )
     return stable / total
 
 
 def _extract_counterparties(transfers: Dict[str, Any]) -> List[str]:
+    """Extract unique counterparty addresses from transfers."""
     cps = set()
     for direction in ("sent", "received"):
         for tx in transfers.get(direction, []):
-            other = tx.get("to") if direction == "sent" else tx.get("from")
-            if other:
-                cps.add(other)
+            # Handle different field names
+            addr = tx.get("transferaddress") or tx.get("to") or tx.get("from")
+            if addr:
+                cps.add(addr)
     return list(cps)
 
 
