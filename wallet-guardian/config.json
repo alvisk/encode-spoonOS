@@ -1,0 +1,63 @@
+{
+  "api_keys": {},
+  "default_agent": "wallet_guardian",
+  "agents": {
+    "wallet_guardian": {
+      "class": "ToolCallAgent",
+      "description": "Neo N3 Wallet Guardian - AI-powered wallet analysis and risk assessment",
+      "tools": [
+        {
+          "name": "get_wallet_summary",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "wallet_validity_score",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "flag_counterparty_risk",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "schedule_monitor",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "multi_wallet_diff",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "approval_scan",
+          "type": "builtin",
+          "enabled": true
+        },
+        {
+          "name": "action_draft",
+          "type": "builtin",
+          "enabled": true
+        }
+      ]
+    }
+  },
+  "x402": {
+    "enabled": true,
+    "network": "base-sepolia",
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "amount_usdc": "0.01",
+    "resources": {
+      "/x402/invoke/wallet_guardian": {
+        "description": "Invoke the Wallet Guardian agent for Neo N3 wallet analysis",
+        "amount_usdc": "0.01"
+      }
+    }
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000
+  }
+}

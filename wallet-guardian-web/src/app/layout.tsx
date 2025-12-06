@@ -1,25 +1,42 @@
 import "~/styles/globals.css";
 
 import { type Metadata } from "next";
-import { Geist } from "next/font/google";
+import Script from "next/script";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 
 export const metadata: Metadata = {
-  title: "Wallet Guardian",
-  description: "Monitor wallets, detect anomalies, and triage alerts fast.",
+  title: "ASSERTION OS",
+  description: "Industrial-grade wallet security. Monitor. Detect. Assert.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
-const geist = Geist({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-geist-sans",
+  variable: "--font-space-grotesk",
+  weight: ["400", "500", "600", "700"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  weight: ["400", "500", "600", "700"],
 });
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geist.variable}`}>
-      <body className="min-h-screen bg-[#f8fafc] text-slate-900 antialiased">
+    <html lang="en" className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        {process.env.NODE_ENV === "development" && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
+      </head>
+      <body className="min-h-screen bg-white text-black antialiased font-[family-name:var(--font-space-grotesk)]">
         {children}
       </body>
     </html>

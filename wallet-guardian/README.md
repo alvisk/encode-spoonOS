@@ -1,28 +1,145 @@
-# Neo Wallet Guardian (SpoonOS) – Plan & Implementation Notes
+# Neo Wallet Guardian (SpoonOS)
 
-This project is currently a planning space for a SpoonOS hackathon build. The goal is to ship an AI Wallet Copilot (Neo Wallet Guardian) that runs as a SpoonOS agent, analyzes wallets on Neo N3, surfaces risks, and optionally generates shareable alerts.
+AI-powered wallet analysis agent for Neo N3 blockchain, built on SpoonOS with x402 payment support on Base Sepolia.
 
-## Outcomes to demo
+## Quick Start
+
+### 1. Setup Environment
+
+```bash
+cd wallet-guardian
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Copy and configure environment
+cp env.example .env
+# Edit .env with your settings
+```
+
+### 2. Run the Server
+
+```bash
+# Development (free mode - no payments required)
+python server.py
+
+# Or with uvicorn
+uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### 3. Test the API
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Analyze a wallet (mock mode for demo)
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "analyze wallet NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq", "use_mock": true}'
+
+# Via x402 gateway endpoint
+curl -X POST http://localhost:8000/x402/invoke/wallet_guardian \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "analyze wallet NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq", "use_mock": true}'
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check |
+| `/health` | GET | Health check |
+| `/x402/requirements` | GET | Get payment requirements |
+| `/x402/invoke/{agent}` | POST | Invoke agent (with x402 payment) |
+| `/analyze` | POST | Simple analysis endpoint (no payment) |
+| `/agents` | GET | List available agents |
+
+## x402 Payment Configuration (Base Sepolia)
+
+To enable pay-per-invoke, configure these in `.env`:
+
+```bash
+# Your agent's wallet (for receiving payments)
+X402_AGENT_PRIVATE_KEY=0x...
+X402_RECEIVER_ADDRESS=0x...
+
+# Base Sepolia USDC
+X402_DEFAULT_ASSET=0x036CbD53842c5426634e7929541eC2318f3dCF7e
+X402_DEFAULT_NETWORK=base-sepolia
+X402_DEFAULT_AMOUNT_USDC=0.01
+
+# x402 Facilitator
+X402_FACILITATOR_URL=https://x402.org/facilitator
+```
+
+## Deployment
+
+### Docker
+
+```bash
+docker build -t wallet-guardian .
+docker run -p 8000:8000 --env-file .env wallet-guardian
+```
+
+### Railway
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Deploy
+railway login
+railway init
+railway up
+```
+
+### Render
+
+1. Connect your GitHub repo to Render
+2. Set environment variables from `.env`
+3. Deploy with start command: `python server.py`
+
+---
+
+## Features
+
 - SpoonOS ToolCallAgent that calls a wallet-summary tool and produces user-facing risk insights.
 - Neo N3 on-chain reads (balances, holdings concentration, recent TXs, counterparty risk) via RPC/Explorer.
-- Optional add-ons for prize stacking: AIOZ caching layer, 4Everland hosting, XerpaAI content generation, Gata “safety alignment” positioning.
+- x402 payment gateway for monetized API access on Base Sepolia
+- Optional add-ons for prize stacking: AIOZ caching layer, 4Everland hosting, XerpaAI content generation, Gata "safety alignment" positioning.
 
-## Architecture sketch
-- Agent runtime: SpoonOS `ToolCallAgent` with a domain-specific system prompt.
-- Core tool: `GetWalletSummaryTool` (BaseTool) -> fetch + aggregate on-chain data for one address (chain defaults to Neo N3).
-- Optional tools:
-  - `GenerateRiskAlertTool` -> wraps XerpaAI to create short social posts from the summary.
-  - `CacheLookupTool` / `CacheWriteTool` -> talk to AIOZ W3S to read/write cached summaries.
-  - `FlagCounterpartyRiskTool` -> checks counterparties against labels/blocklists and simple heuristics (new tokens, low liquidity, known scams).
-  - `ScheduleMonitorTool` -> schedules rechecks and sends alerts when balances/risks change.
-  - `MultiWalletDiffTool` -> compares two wallets for diversification and overlap.
-- Flow:
-  1) Agent receives wallet address.
-  2) Cache lookup (if enabled) -> return cached summary or continue.
-  3) Fetch balances/positions/txs from Neo RPC/Explorer; compute risk metrics.
-  4) Agent composes human-readable summary + risk flags.
-  5) Optionally call XerpaAI tool to draft a tweet/blog blurb.
-  6) Persist summary to cache (if enabled).
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Client    │────▶│  x402 Gateway    │────▶│  Wallet Agent   │
+│             │     │  (FastAPI)       │     │  (SpoonOS)      │
+│             │◀────│  - Payment verify│◀────│  - Neo RPC      │
+│             │     │  - Route requests│     │  - Risk metrics │
+└─────────────┘     └──────────────────┘     └─────────────────┘
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Base Sepolia  │
+                    │ (x402 USDC)   │
+                    └───────────────┘
+```
+
+## Tools
+
+| Tool | Status | Description |
+|------|--------|-------------|
+| `get_wallet_summary` | Working | Fetch balances/transfers, compute risk metrics |
+| `wallet_validity_score` | Working | 0-100 validity score with deductions |
+| `flag_counterparty_risk` | Stub | Label counterparties with risk tags |
+| `schedule_monitor` | Stub | Set up alerts for wallet changes |
+| `multi_wallet_diff` | Stub | Compare diversification across wallets |
+| `approval_scan` | Stub | Check for risky token approvals |
+| `action_draft` | Stub | Generate safe action messages |
+
+---
+
+## Development Notes
 
 ## Additional agent features to consider
 - Counterparty labeling and threat intel: map addresses to known entities/exploits; highlight first-time interactions with low-trust contracts or tokens.

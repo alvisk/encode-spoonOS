@@ -20,6 +20,10 @@ class FlagCounterpartyRiskTool(BaseTool):
         "required": ["address", "counterparties"],
     }
 
+    async def execute(self, address: str, counterparties: List[str]):
+        """Execute the tool (required by BaseTool interface)."""
+        return self.call(address=address, counterparties=counterparties)
+
     def call(self, address: str, counterparties: List[str]):
         # TODO: lookup labels/blocklists (local JSON or HTTP)
         # TODO: add heuristics (new token age, low liquidity, known scams)

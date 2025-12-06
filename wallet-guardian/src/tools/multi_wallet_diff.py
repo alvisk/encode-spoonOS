@@ -19,6 +19,10 @@ class MultiWalletDiffTool(BaseTool):
         "required": ["addresses"],
     }
 
+    async def execute(self, addresses: List[str]):
+        """Execute the tool (required by BaseTool interface)."""
+        return self.call(addresses=addresses)
+
     def call(self, addresses: List[str]):
         # TODO: call GetWalletSummaryTool per address (or inject summaries)
         # TODO: compute overlap of tokens/counterparties and concentration flags
