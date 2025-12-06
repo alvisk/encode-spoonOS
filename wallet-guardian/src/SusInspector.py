@@ -651,6 +651,29 @@ class SusInspector:
         
         return "unknown"
 
+    def _check_known_scam_addresses(
+        self,
+        transfers: List[Dict],
+        user_address: str
+    ) -> List[SuspiciousTransaction]:
+        """Check transfers for interactions with known scam addresses."""
+        suspicious = []
+        
+        for tx in transfers:
+            counterparty = tx.get("transferaddress", "")
+            if counterparty and counterparty in self.KNOWN_SCAM_ADDRESSES:
+                suspicious.append(SuspiciousTransaction(
+                    tx_hash=tx.get("txhash", "unknown"),
+                    timestamp=tx.get("timestamp", 0),
+                    reason=f"Transaction with known scam address: {counterparty[:16]}...",
+                    level=SuspicionLevel.CRITICAL,
+                    amount=tx.get("amount"),
+                    counterparty=counterparty,
+                    asset=self._get_token_name(tx.get("assethash", "")),
+                ))
+        
+        return suspicious
+
     def _check_rapid_transactions(
         self, 
         transfers: List[Dict]
