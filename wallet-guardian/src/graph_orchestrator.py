@@ -16,7 +16,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Tuple, TypeVar, Generic
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Set, Tuple
 from collections import defaultdict
 
 from spoon_ai.agents import SpoonReactAI
@@ -24,6 +24,12 @@ from spoon_ai.chat import ChatBot, Memory
 from spoon_ai.tools import BaseTool, ToolManager
 
 from .neo_client import NeoClient, NeoRPCError
+from .common import (
+    RiskLevel,
+    compute_trust_score,
+    get_risk_level_from_trust_score,
+    DEFAULT_CACHE_TTL,
+)
 
 
 # =============================================================================
@@ -41,8 +47,8 @@ class WalletDataCache:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._cache: Dict[str, Tuple[Any, float]] = {}
-            cls._instance._locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+            cls._instance._cache = {}  # Dict[str, Tuple[Any, float]]
+            cls._instance._locks = defaultdict(asyncio.Lock)  # Dict[str, asyncio.Lock]
         return cls._instance
     
     def _make_key(self, operation: str, **params) -> str:
@@ -493,58 +499,13 @@ def compute_risk_score(
     counterparty_count: int,
     suspicious_patterns: List[Dict]
 ) -> Tuple[int, List[Dict[str, Any]]]:
-    """Compute unified risk score and deductions."""
-    score = 100
-    deductions = []
+    """
+    Compute unified trust score and deductions.
     
-    # Concentration penalty
-    if concentration > 0.8:
-        penalty = 20
-        deductions.append({"reason": "high_concentration", "penalty": penalty})
-        score -= penalty
-    elif concentration > 0.6:
-        penalty = 10
-        deductions.append({"reason": "moderate_concentration", "penalty": penalty})
-        score -= penalty
-    
-    # Stablecoin buffer
-    if stablecoin_ratio < 0.05:
-        penalty = 10
-        deductions.append({"reason": "very_low_stablecoin_buffer", "penalty": penalty})
-        score -= penalty
-    elif stablecoin_ratio < 0.1:
-        penalty = 5
-        deductions.append({"reason": "low_stablecoin_buffer", "penalty": penalty})
-        score -= penalty
-    
-    # Activity check
-    if counterparty_count == 0:
-        penalty = 10
-        deductions.append({"reason": "inactive_or_new_wallet", "penalty": penalty})
-        score -= penalty
-    elif counterparty_count < 3:
-        penalty = 5
-        deductions.append({"reason": "low_counterparty_diversity", "penalty": penalty})
-        score -= penalty
-    
-    # Suspicious patterns
-    for pattern in suspicious_patterns:
-        if pattern.get("level") == "critical":
-            penalty = 30
-        elif pattern.get("level") == "high":
-            penalty = 20
-        elif pattern.get("level") == "medium":
-            penalty = 10
-        else:
-            penalty = 5
-        deductions.append({
-            "reason": pattern.get("type", "suspicious_pattern"),
-            "penalty": penalty,
-            "detail": pattern
-        })
-        score -= penalty
-    
-    return max(0, min(100, score)), deductions
+    Delegates to the canonical compute_trust_score in common.py.
+    Returns: Tuple of (score 0-100 where 100=best, deductions list)
+    """
+    return compute_trust_score(concentration, stablecoin_ratio, counterparty_count, suspicious_patterns)
 
 
 # =============================================================================
@@ -647,13 +608,8 @@ class WalletAnalysisGraphBuilder:
             data = deps["fetch_data"].data
             score, deductions = deps["risk_score"].data
             
-            risk_level = (
-                "clean" if score >= 90 else
-                "low" if score >= 70 else
-                "moderate" if score >= 50 else
-                "high" if score >= 30 else
-                "critical"
-            )
+            # Use the shared risk level function
+            risk_level = get_risk_level_from_trust_score(score)
             
             return {
                 "address": ctx["address"],
@@ -1055,7 +1011,7 @@ Never give specific financial recommendations."""
             return {
                 "address": address,
                 "risk_score": score,
-                "risk_level": "clean" if score >= 90 else "low" if score >= 70 else "moderate" if score >= 50 else "high" if score >= 30 else "critical",
+                "risk_level": get_risk_level_from_trust_score(score),
                 "metrics": {
                     "concentration": concentration,
                     "stablecoin_ratio": stablecoin,

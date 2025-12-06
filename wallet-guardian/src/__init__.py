@@ -1,9 +1,23 @@
 # Package init for the SpoonOS agent prototype.
 
+# Common utilities and shared types
+from .common import (
+    RiskLevel,
+    TRUSTED_CONTRACTS,
+    KNOWN_SCAM_ADDRESSES,
+    KNOWN_MALICIOUS_CONTRACTS,
+    compute_trust_score,
+    compute_suspicion_score,
+    get_risk_level_from_trust_score,
+    get_risk_level_from_suspicion_score,
+    normalize_contract_hash,
+    get_token_name,
+)
+
 # Core clients
 from .neo_client import NeoClient, NeoRPCError
 
-# Suspicious transaction inspector
+# Suspicious transaction inspector (uses common.RiskLevel as SuspicionLevel)
 from .SusInspector import SusInspector, inspect_wallet_for_suspicious_activity, SuspicionLevel
 
 # Graph-based multi-agent orchestrator (main entry point)

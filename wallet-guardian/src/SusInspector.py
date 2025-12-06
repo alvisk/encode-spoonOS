@@ -9,26 +9,27 @@ import time
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
-from enum import Enum
 
 from .neo_client import NeoClient, NeoRPCError
+from .common import (
+    RiskLevel,
+    TRUSTED_CONTRACTS,
+    KNOWN_SCAM_ADDRESSES,
+    KNOWN_MALICIOUS_CONTRACTS,
+    RAPID_TX_WINDOW_SECONDS,
+    RAPID_TX_THRESHOLD,
+    LARGE_TRANSFER_THRESHOLD_GAS,
+    DUST_AMOUNT_THRESHOLD,
+    NEW_CONTRACT_BLOCKS,
+    normalize_contract_hash,
+    get_token_name,
+    compute_suspicion_score,
+    get_risk_level_from_suspicion_score,
+)
 
-
-class SuspicionLevel(Enum):
-    """Severity level for suspicious activity."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class ContractRiskLevel(Enum):
-    """Risk level for smart contracts."""
-    SAFE = "safe"
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+# Backwards compatibility aliases
+SuspicionLevel = RiskLevel
+ContractRiskLevel = RiskLevel
 
 
 @dataclass
@@ -60,29 +61,10 @@ class ContractAnalysis:
 class SusInspector:
     """Inspects Neo N3 wallet transactions for suspicious activity."""
     
-    # Known suspicious/scam addresses (regularly updated)
-    KNOWN_SCAM_ADDRESSES: Set[str] = {
-        # Add known scam addresses here
-        # "NScamAddress1...",
-    }
-    
-    # Known malicious contract hashes
-    KNOWN_MALICIOUS_CONTRACTS: Set[str] = {
-        # Add known malicious contract hashes (lowercase, no 0x)
-    }
-    
-    # Known legitimate/trusted contracts (whitelisted)
-    TRUSTED_CONTRACTS: Dict[str, str] = {
-        "ef4073a0f2b305a38ec4050e4d3d28bc40ea63f5": "NEO",
-        "d2a4cff31913016155e38e474a2c06d08be276cf": "GAS",
-        "f0151f528127276b9301cb43c386fa343e41a20a": "FLM (Flamingo)",
-        "48c40d4666f93408be1bef038b6722404d9a4c2a": "NNS",
-        "1a4e258bd51d16e8f699870cc40e3f7f8cb8f2c7": "fUSDT (Flamingo)",
-        "9b049f1283515eef1d3f6ac610e1595ed25ca3e9": "NeoBurger",
-        "f46719e2d16bf50cddcef9d4bbfece901f73cbb6": "bNEO",
-        "cd48b160c1bbc9d74997b803b9a7ad50a4bef020": "Forthewin (FTW)",
-        "1005fc3fa9c8e7cc28f02e7f43fe96de2d6832ed": "NeoCompiler Eco",
-    }
+    # Use shared constants from common module
+    KNOWN_SCAM_ADDRESSES = KNOWN_SCAM_ADDRESSES
+    KNOWN_MALICIOUS_CONTRACTS = KNOWN_MALICIOUS_CONTRACTS
+    TRUSTED_CONTRACTS = TRUSTED_CONTRACTS
     
     # Suspicious contract name patterns (regex)
     SUSPICIOUS_NAME_PATTERNS = [
@@ -107,13 +89,6 @@ class SusInspector:
         "emergencyWithdraw", "rugPull", "ownerWithdraw",
         "setTaxTo100", "blacklistAll", "disableTransfer"
     }
-    
-    # Thresholds
-    RAPID_TX_WINDOW_SECONDS = 300  # 5 minutes
-    RAPID_TX_THRESHOLD = 10
-    LARGE_TRANSFER_THRESHOLD_GAS = 1000
-    DUST_AMOUNT_THRESHOLD = 0.0001
-    NEW_CONTRACT_BLOCKS = 50000  # ~7 days on Neo N3
     
     # Cache for contract analysis
     _contract_cache: Dict[str, ContractAnalysis] = {}
@@ -783,38 +758,20 @@ class SusInspector:
         for known_hash, name in self.TRUSTED_CONTRACTS.items():
             if known_hash.replace("0x", "") == asset_hash_lower:
                 return name
-        return asset_hash[:16] + "..." if len(asset_hash) > 16 else asset_hash
+        return get_token_name(asset_hash)
     
     def _calculate_risk_score(self, suspicious_txs: List[SuspiciousTransaction]) -> int:
-        """Calculate overall risk score (0-100) based on suspicious transactions."""
-        if not suspicious_txs:
-            return 0
+        """Calculate overall risk score (0-100) based on suspicious transactions.
         
-        score = 0
-        level_weights = {
-            SuspicionLevel.LOW: 5,
-            SuspicionLevel.MEDIUM: 15,
-            SuspicionLevel.HIGH: 30,
-            SuspicionLevel.CRITICAL: 50,
-        }
-        
-        for tx in suspicious_txs:
-            score += level_weights.get(tx.level, 5)
-        
-        return min(score, 100)  # Cap at 100
+        Uses suspicion scoring: 0 = clean, 100 = worst.
+        """
+        # Convert SuspiciousTransaction objects to dicts for shared function
+        items = [{"level": tx.level} for tx in suspicious_txs]
+        return compute_suspicion_score(items, "level")
     
     def _get_risk_level(self, score: int) -> str:
-        """Convert risk score to human-readable level."""
-        if score == 0:
-            return "clean"
-        elif score < 20:
-            return "low"
-        elif score < 50:
-            return "moderate"
-        elif score < 80:
-            return "high"
-        else:
-            return "critical"
+        """Convert suspicion score to human-readable level."""
+        return get_risk_level_from_suspicion_score(score)
     
     def _generate_summary(
         self, 
@@ -826,10 +783,10 @@ class SusInspector:
         if not suspicious_txs and not suspicious_contracts:
             return "No suspicious activity detected. Wallet appears clean."
         
-        critical = sum(1 for tx in suspicious_txs if tx.level == SuspicionLevel.CRITICAL)
-        high = sum(1 for tx in suspicious_txs if tx.level == SuspicionLevel.HIGH)
-        medium = sum(1 for tx in suspicious_txs if tx.level == SuspicionLevel.MEDIUM)
-        low = sum(1 for tx in suspicious_txs if tx.level == SuspicionLevel.LOW)
+        critical = sum(1 for tx in suspicious_txs if tx.level == RiskLevel.CRITICAL)
+        high = sum(1 for tx in suspicious_txs if tx.level == RiskLevel.HIGH)
+        medium = sum(1 for tx in suspicious_txs if tx.level == RiskLevel.MEDIUM)
+        low = sum(1 for tx in suspicious_txs if tx.level == RiskLevel.LOW)
         
         parts = []
         if critical:

@@ -48,14 +48,9 @@ Guidelines:
 Available tools will help you analyze Neo N3 wallets comprehensively."""
 
 
-def build_agent() -> ToolCallAgent:
-    """
-    Construct the ToolCallAgent with all available tools.
-    
-    This is the legacy interface. For better performance with caching
-    and parallel execution, use MultiAgentOrchestrator instead.
-    """
-    tools = [
+def _create_tools_list():
+    """Create the standard tools list. Used by all agent builders."""
+    return [
         GetWalletSummaryTool(),
         WalletValidityScoreTool(),
         FlagCounterpartyRiskTool(),
@@ -64,6 +59,16 @@ def build_agent() -> ToolCallAgent:
         ApprovalScanTool(),
         ActionDraftTool(),
     ]
+
+
+def build_agent() -> ToolCallAgent:
+    """
+    Construct the ToolCallAgent with all available tools.
+    
+    This is the legacy interface. For better performance with caching
+    and parallel execution, use MultiAgentOrchestrator instead.
+    """
+    tools = _create_tools_list()
     tool_manager = ToolManager(tools)
     llm = ChatBot()
     
@@ -82,15 +87,7 @@ def build_react_agent() -> SpoonReactAI:
     This agent uses the ReAct pattern (Reasoning + Acting) for
     more complex multi-step analysis tasks.
     """
-    tools = [
-        GetWalletSummaryTool(),
-        WalletValidityScoreTool(),
-        FlagCounterpartyRiskTool(),
-        ScheduleMonitorTool(),
-        MultiWalletDiffTool(),
-        ApprovalScanTool(),
-        ActionDraftTool(),
-    ]
+    tools = _create_tools_list()
     
     agent = SpoonReactAI(
         name="WalletGuardian",
@@ -176,6 +173,7 @@ def get_guardian() -> WalletGuardian:
     return _guardian
 
 
+
 # =============================================================================
 # Server Compatibility Functions
 # =============================================================================
@@ -185,15 +183,7 @@ AGENT_NAME = "Neo Wallet Guardian"
 
 def get_tools():
     """Get list of available tools for the agent."""
-    return [
-        GetWalletSummaryTool(),
-        WalletValidityScoreTool(),
-        FlagCounterpartyRiskTool(),
-        ScheduleMonitorTool(),
-        MultiWalletDiffTool(),
-        ApprovalScanTool(),
-        ActionDraftTool(),
-    ]
+    return _create_tools_list()
 
 
 def register_agent() -> dict:
@@ -209,10 +199,9 @@ def register_agent() -> dict:
             "suspicious_activity_detection",
             "multi_wallet_comparison",
             "real_time_monitoring",
-            "voice_alerts",  # New feature!
+            "voice_alerts",
         ],
     }
-
 
 
 
