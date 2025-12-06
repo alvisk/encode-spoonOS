@@ -1,19 +1,6 @@
-# Encode SpoonOS Hackathon Projects
-
-This repository now hosts two independent projects. Each can be worked on separately without shared dependencies.
-
-## Projects
-- `wallet-guardian/`: Neo Wallet Guardian SpoonOS agent scaffold. Install deps with `pip install -r wallet-guardian/requirements.txt`, set `NEO_RPC_URL`, then run `cd wallet-guardian && python -m src.cli "summarize wallet <address>"`.
-- `chump-change/`: Micro-donation / payment-splitter concept for Neo + SpoonOS co-signer. Contains proposal and partner notes under `docs/`.
-
-## Other folders
-- `workflow/`: early notes for an offload-to-AIOZ orchestration agent.
-- `api/` and `algoBoost/`: experimental service stubs kept for reference.
-
-Work inside the relevant project folder to avoid cross-contamination of environments and dependencies.
 # Neo Wallet Guardian (SpoonOS) – Plan & Implementation Notes
 
-This repo is currently a planning space for a SpoonOS hackathon build. The goal is to ship an AI Wallet Copilot (Neo Wallet Guardian) that runs as a SpoonOS agent, analyzes wallets on Neo N3, surfaces risks, and optionally generates shareable alerts.
+This project is currently a planning space for a SpoonOS hackathon build. The goal is to ship an AI Wallet Copilot (Neo Wallet Guardian) that runs as a SpoonOS agent, analyzes wallets on Neo N3, surfaces risks, and optionally generates shareable alerts.
 
 ## Outcomes to demo
 - SpoonOS ToolCallAgent that calls a wallet-summary tool and produces user-facing risk insights.
