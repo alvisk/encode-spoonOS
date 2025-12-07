@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import io
 import json
 import os
 import time
@@ -29,6 +28,8 @@ import aiohttp
 
 from .config import get_config
 
+
+from .common import RiskLevel
 
 # =============================================================================
 # CONFIGURATION
@@ -42,12 +43,8 @@ class VoicePersona(Enum):
     CONCISE = "concise"           # Brief, efficient - for quick updates
 
 
-class AlertSeverity(Enum):
-    """Severity levels with corresponding voice treatment."""
-    INFO = "info"
-    WARNING = "warning"
-    CRITICAL = "critical"
-    EMERGENCY = "emergency"
+# Use RiskLevel as AlertSeverity for consistency
+AlertSeverity = RiskLevel
 
 
 @dataclass
@@ -268,10 +265,11 @@ class VoiceGuardian:
     def _get_voice_for_severity(self, severity: AlertSeverity) -> VoicePersona:
         """Map severity to appropriate voice persona."""
         severity_to_persona = {
-            AlertSeverity.INFO: VoicePersona.FRIENDLY,
-            AlertSeverity.WARNING: VoicePersona.PROFESSIONAL,
+            AlertSeverity.CLEAN: VoicePersona.FRIENDLY,
+            AlertSeverity.LOW: VoicePersona.FRIENDLY,
+            AlertSeverity.MEDIUM: VoicePersona.PROFESSIONAL,
+            AlertSeverity.HIGH: VoicePersona.URGENT,
             AlertSeverity.CRITICAL: VoicePersona.URGENT,
-            AlertSeverity.EMERGENCY: VoicePersona.URGENT,
         }
         return severity_to_persona.get(severity, self.default_persona)
     
@@ -294,7 +292,7 @@ class VoiceGuardian:
     async def speak_alert(
         self,
         message: str,
-        severity: AlertSeverity = AlertSeverity.INFO,
+        severity: AlertSeverity = AlertSeverity.LOW,
         address: Optional[str] = None,
     ) -> bytes:
         """
@@ -314,9 +312,9 @@ class VoiceGuardian:
             message = f"Alert for wallet {short_addr}. {message}"
         
         # Add urgency prefix for critical alerts
-        if severity == AlertSeverity.CRITICAL:
-            message = f"Attention! Critical alert. {message}"
-        elif severity == AlertSeverity.EMERGENCY:
+        if severity == AlertSeverity.HIGH:
+            message = f"Attention! High priority alert. {message}"
+        elif severity == AlertSeverity.CRITICAL:
             message = f"Emergency! Immediate action required. {message}"
         
         # Get appropriate voice
@@ -324,7 +322,7 @@ class VoiceGuardian:
         config = VoiceConfig(voice_id=self._get_voice_for_persona(persona))
         
         # Adjust voice settings for urgency
-        if severity in (AlertSeverity.CRITICAL, AlertSeverity.EMERGENCY):
+        if severity in (AlertSeverity.HIGH, AlertSeverity.CRITICAL):
             config.stability = 0.3  # More dramatic
             config.style = 0.2     # More expressive
         
@@ -375,15 +373,15 @@ class VoiceGuardian:
             if suspicious_contracts:
                 parts.append(f"Detected {len(suspicious_contracts)} suspicious smart contracts.")
         
-        # Determine severity for voice
+        # Determine severity for voice using the unified RiskLevel
         if risk_score >= 80:
-            severity = AlertSeverity.EMERGENCY
-        elif risk_score >= 50:
             severity = AlertSeverity.CRITICAL
+        elif risk_score >= 50:
+            severity = AlertSeverity.HIGH
         elif risk_score >= 20:
-            severity = AlertSeverity.WARNING
+            severity = AlertSeverity.MEDIUM
         else:
-            severity = AlertSeverity.INFO
+            severity = AlertSeverity.LOW
         
         message = " ".join(parts)
         return await self.speak_alert(message, severity)
@@ -510,7 +508,7 @@ class VoiceGuardian:
     async def stream_alert(
         self,
         message: str,
-        severity: AlertSeverity = AlertSeverity.INFO,
+        severity: AlertSeverity = AlertSeverity.LOW,
     ) -> AsyncIterator[bytes]:
         """
         Stream an alert for real-time playback.
@@ -591,7 +589,7 @@ class VoiceAlertSystem:
     async def queue_alert(
         self,
         message: str,
-        severity: AlertSeverity = AlertSeverity.INFO,
+        severity: AlertSeverity = AlertSeverity.LOW,
         address: Optional[str] = None,
     ):
         """Queue an alert to be spoken."""
@@ -638,12 +636,16 @@ def get_voice_guardian() -> VoiceGuardian:
 
 async def speak_alert(
     message: str,
-    severity: str = "info",
+    severity: str = "low",
     address: Optional[str] = None,
 ) -> bytes:
     """Quick function to speak an alert."""
     guardian = get_voice_guardian()
-    sev = AlertSeverity(severity) if severity in [s.value for s in AlertSeverity] else AlertSeverity.INFO
+    # Map string severity to RiskLevel enum
+    try:
+        sev = AlertSeverity(severity)
+    except ValueError:
+        sev = AlertSeverity.LOW
     return await guardian.speak_alert(message, sev, address)
 
 

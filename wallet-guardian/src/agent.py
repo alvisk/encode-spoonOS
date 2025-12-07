@@ -73,8 +73,8 @@ Guidelines:
 Available tools will help you analyze Neo N3 wallets comprehensively."""
 
 
-def get_tools() -> List[BaseTool]:
-    """Get all available tools."""
+def _create_tools_list() -> List[BaseTool]:
+    """Create the standard tools list. Used by all agent builders."""
     return [
         GetWalletSummaryTool(),
         WalletValidityScoreTool(),
@@ -126,7 +126,7 @@ def build_agent() -> ToolCallAgent:
     This is the legacy interface. For better performance with caching
     and parallel execution, use MultiAgentOrchestrator instead.
     """
-    tools = get_tools()
+    tools = _create_tools_list()
     tool_manager = ToolManager(tools)
     llm = _get_llm()
     
@@ -145,7 +145,7 @@ def build_react_agent() -> SpoonReactAI:
     This agent uses the ReAct pattern (Reasoning + Acting) for
     more complex multi-step analysis tasks.
     """
-    tools = get_tools()
+    tools = _create_tools_list()
     llm = _get_llm()
     
     agent = SpoonReactAI(
@@ -230,6 +230,11 @@ def get_guardian() -> WalletGuardian:
     if _guardian is None:
         _guardian = WalletGuardian()
     return _guardian
+
+
+def get_tools() -> List[BaseTool]:
+    """Get list of available tools for the agent."""
+    return _create_tools_list()
 
 
 def register_agent() -> dict:
