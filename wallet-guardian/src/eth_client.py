@@ -3,6 +3,8 @@ Ethereum Client for Wallet Guardian
 
 Uses public APIs (Etherscan, public RPCs) to fetch Ethereum wallet data.
 No API key required for basic queries.
+
+Includes contract source code fetching for malicious contract analysis.
 """
 
 import asyncio
@@ -11,9 +13,23 @@ import os
 import re
 import time
 import urllib.request
+import threading
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+
+
+# =============================================================================
+# CACHING FOR CONTRACT DATA
+# =============================================================================
+
+# Cache TTL in seconds (1 hour)
+CONTRACT_CACHE_TTL = 3600
+
+# Global cache for contract source code
+_contract_source_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
+_contract_info_cache: Dict[str, Tuple[Optional[Dict], float]] = {}
+_cache_lock = threading.Lock()
 
 
 class Chain(Enum):
@@ -500,7 +516,247 @@ class EthClient:
         }
 
 
-# Convenience functions
+    # =========================================================================
+    # CONTRACT SOURCE CODE FETCHING (for malicious contract analysis)
+    # =========================================================================
+    
+    def get_contract_source_code(self, address: str, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Get verified source code for a contract from Blockscout.
+        
+        Args:
+            address: Contract address (0x...)
+            force_refresh: Bypass cache if True
+            
+        Returns:
+            Dict with source code, ABI, compiler info, or None if not verified
+        """
+        is_valid, error = is_valid_eth_address(address)
+        if not is_valid:
+            return None
+        
+        cache_key = f"{self.chain.value}:{address.lower()}"
+        
+        # Check cache
+        if not force_refresh:
+            with _cache_lock:
+                if cache_key in _contract_source_cache:
+                    cached_data, timestamp = _contract_source_cache[cache_key]
+                    if time.time() - timestamp < CONTRACT_CACHE_TTL:
+                        return cached_data
+        
+        try:
+            result = self._explorer_request({
+                "module": "contract",
+                "action": "getsourcecode",
+                "address": address,
+            })
+            
+            if not result or isinstance(result, str):
+                with _cache_lock:
+                    _contract_source_cache[cache_key] = (None, time.time())
+                return None
+            
+            # Blockscout returns a list with one item
+            contract_info = result[0] if isinstance(result, list) else result
+            
+            # Check if contract is verified
+            source_code = contract_info.get("SourceCode", "")
+            if not source_code:
+                with _cache_lock:
+                    _contract_source_cache[cache_key] = (None, time.time())
+                return None
+            
+            # Parse ABI
+            abi = []
+            abi_str = contract_info.get("ABI", "")
+            if abi_str and abi_str != "Contract source code not verified":
+                try:
+                    abi = json.loads(abi_str)
+                except json.JSONDecodeError:
+                    pass
+            
+            parsed_result = {
+                "address": address,
+                "is_verified": True,
+                "source_code": source_code,
+                "abi": abi,
+                "contract_name": contract_info.get("ContractName", "Unknown"),
+                "compiler_version": contract_info.get("CompilerVersion", ""),
+                "optimization_used": contract_info.get("OptimizationUsed", "0") == "1",
+                "runs": int(contract_info.get("Runs", 0)),
+                "constructor_arguments": contract_info.get("ConstructorArguments", ""),
+                "evm_version": contract_info.get("EVMVersion", ""),
+                "library": contract_info.get("Library", ""),
+                "license_type": contract_info.get("LicenseType", ""),
+                "proxy": contract_info.get("Proxy", "0") == "1",
+                "implementation": contract_info.get("Implementation", ""),
+            }
+            
+            # Cache the result
+            with _cache_lock:
+                _contract_source_cache[cache_key] = (parsed_result, time.time())
+            
+            return parsed_result
+            
+        except Exception as e:
+            # Cache the failure to avoid repeated requests
+            with _cache_lock:
+                _contract_source_cache[cache_key] = (None, time.time())
+            return None
+    
+    def get_contract_abi(self, address: str) -> Optional[List[Dict]]:
+        """
+        Get ABI for a verified contract.
+        
+        Args:
+            address: Contract address
+            
+        Returns:
+            List of ABI entries or None
+        """
+        source_info = self.get_contract_source_code(address)
+        if source_info and source_info.get("abi"):
+            return source_info["abi"]
+        return None
+    
+    def is_contract(self, address: str) -> bool:
+        """
+        Check if an address is a contract (has bytecode).
+        
+        Args:
+            address: Ethereum address
+            
+        Returns:
+            True if contract, False if EOA
+        """
+        is_valid, error = is_valid_eth_address(address)
+        if not is_valid:
+            return False
+        
+        try:
+            code = self._rpc_request("eth_getCode", [address, "latest"])
+            # EOAs return "0x", contracts return bytecode
+            return code is not None and code != "0x" and len(code) > 2
+        except Exception:
+            return False
+    
+    def get_contract_bytecode(self, address: str) -> Optional[str]:
+        """
+        Get the bytecode of a contract.
+        
+        Args:
+            address: Contract address
+            
+        Returns:
+            Bytecode hex string or None
+        """
+        is_valid, error = is_valid_eth_address(address)
+        if not is_valid:
+            return None
+        
+        try:
+            code = self._rpc_request("eth_getCode", [address, "latest"])
+            if code and code != "0x":
+                return code
+            return None
+        except Exception:
+            return None
+    
+    def get_contract_creation_info(self, address: str, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Get contract creation information (deployer, tx hash, block).
+        
+        Args:
+            address: Contract address
+            force_refresh: Bypass cache if True
+            
+        Returns:
+            Dict with creation info or None
+        """
+        is_valid, error = is_valid_eth_address(address)
+        if not is_valid:
+            return None
+        
+        cache_key = f"creation:{self.chain.value}:{address.lower()}"
+        
+        # Check cache
+        if not force_refresh:
+            with _cache_lock:
+                if cache_key in _contract_info_cache:
+                    cached_data, timestamp = _contract_info_cache[cache_key]
+                    if time.time() - timestamp < CONTRACT_CACHE_TTL:
+                        return cached_data
+        
+        try:
+            # Blockscout API for contract creation
+            result = self._explorer_request({
+                "module": "contract",
+                "action": "getcontractcreation",
+                "contractaddresses": address,
+            })
+            
+            if not result:
+                # Try alternative: get first internal transaction
+                with _cache_lock:
+                    _contract_info_cache[cache_key] = (None, time.time())
+                return None
+            
+            creation_info = result[0] if isinstance(result, list) else result
+            
+            parsed_result = {
+                "address": address,
+                "deployer": creation_info.get("contractCreator", ""),
+                "creation_tx": creation_info.get("txHash", ""),
+                "creation_block": creation_info.get("blockNumber", ""),
+            }
+            
+            # Cache the result
+            with _cache_lock:
+                _contract_info_cache[cache_key] = (parsed_result, time.time())
+            
+            return parsed_result
+            
+        except Exception:
+            with _cache_lock:
+                _contract_info_cache[cache_key] = (None, time.time())
+            return None
+    
+    def is_contract_verified(self, address: str) -> bool:
+        """
+        Check if a contract's source code is verified.
+        
+        Args:
+            address: Contract address
+            
+        Returns:
+            True if verified, False otherwise
+        """
+        source_info = self.get_contract_source_code(address)
+        return source_info is not None and source_info.get("is_verified", False)
+    
+    def is_proxy_contract(self, address: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if a contract is a proxy and get implementation address.
+        
+        Args:
+            address: Contract address
+            
+        Returns:
+            Tuple of (is_proxy, implementation_address)
+        """
+        source_info = self.get_contract_source_code(address)
+        if source_info:
+            is_proxy = source_info.get("proxy", False)
+            implementation = source_info.get("implementation", "")
+            return is_proxy, implementation if implementation else None
+        return False, None
+
+
+# =============================================================================
+# CONVENIENCE FUNCTIONS
+# =============================================================================
+
 def get_eth_client(chain: Chain = Chain.ETHEREUM) -> EthClient:
     """Get an Ethereum client for the specified chain."""
     return EthClient(chain=chain)
@@ -519,3 +775,26 @@ def analyze_eth_wallet(address: str, chain: Chain = Chain.ETHEREUM) -> Dict[str,
     """
     client = get_eth_client(chain)
     return client.compute_risk_score(address)
+
+
+def get_contract_source(address: str, chain: Chain = Chain.ETHEREUM) -> Optional[Dict[str, Any]]:
+    """
+    Get verified source code for a contract.
+    
+    Args:
+        address: Contract address (0x...)
+        chain: Target chain (default: Ethereum mainnet)
+        
+    Returns:
+        Dict with source code info or None if not verified
+    """
+    client = get_eth_client(chain)
+    return client.get_contract_source_code(address)
+
+
+def clear_contract_cache() -> None:
+    """Clear all cached contract data."""
+    global _contract_source_cache, _contract_info_cache
+    with _cache_lock:
+        _contract_source_cache.clear()
+        _contract_info_cache.clear()

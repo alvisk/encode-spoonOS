@@ -1,0 +1,273 @@
+{
+    "name": "malicious_contract_oracle",
+    "groups": [],
+    "abi": {
+        "methods": [
+            {
+                "name": "_deploy",
+                "offset": 3801,
+                "parameters": [
+                    {
+                        "type": "Any",
+                        "name": "data"
+                    },
+                    {
+                        "type": "Boolean",
+                        "name": "update"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Void"
+            },
+            {
+                "name": "set_api_url",
+                "offset": 1943,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "new_url"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "get_api_url",
+                "offset": 2012,
+                "parameters": [],
+                "safe": false,
+                "returntype": "String"
+            },
+            {
+                "name": "get_owner",
+                "offset": 2114,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Hash160"
+            },
+            {
+                "name": "get_total_scans",
+                "offset": 2159,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "request_contract_scan",
+                "offset": 2193,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "oracle_callback",
+                "offset": 2414,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "url"
+                    },
+                    {
+                        "type": "ByteArray",
+                        "name": "user_data"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "code"
+                    },
+                    {
+                        "type": "ByteArray",
+                        "name": "result"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Void"
+            },
+            {
+                "name": "get_risk_score",
+                "offset": 2866,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "is_malicious",
+                "offset": 2945,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "get_risk_level",
+                "offset": 2983,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "String"
+            },
+            {
+                "name": "get_issues",
+                "offset": 3089,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "String"
+            },
+            {
+                "name": "get_summary",
+                "offset": 3129,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "String"
+            },
+            {
+                "name": "get_last_update",
+                "offset": 3166,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Integer"
+            },
+            {
+                "name": "get_full_analysis",
+                "offset": 3205,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Map",
+                "returngenerickey": {
+                    "type": "Any"
+                },
+                "returngenericitem": {
+                    "type": "Any"
+                }
+            },
+            {
+                "name": "is_safe_to_interact",
+                "offset": 3519,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "max_risk_score"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "set_contract_risk_manual",
+                "offset": 3540,
+                "parameters": [
+                    {
+                        "type": "String",
+                        "name": "contract_address"
+                    },
+                    {
+                        "type": "Integer",
+                        "name": "risk_score"
+                    },
+                    {
+                        "type": "Boolean",
+                        "name": "is_mal"
+                    },
+                    {
+                        "type": "String",
+                        "name": "risk_level"
+                    },
+                    {
+                        "type": "String",
+                        "name": "issues"
+                    },
+                    {
+                        "type": "String",
+                        "name": "summary"
+                    }
+                ],
+                "safe": false,
+                "returntype": "Boolean"
+            },
+            {
+                "name": "verify",
+                "offset": 3795,
+                "parameters": [],
+                "safe": false,
+                "returntype": "Boolean"
+            }
+        ],
+        "events": [
+            {
+                "name": "notify",
+                "parameters": [
+                    {
+                        "name": "state",
+                        "type": "Any"
+                    }
+                ]
+            }
+        ]
+    },
+    "permissions": [
+        {
+            "contract": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+            "methods": [
+                "stringSplit"
+            ]
+        },
+        {
+            "contract": "0xfe924b7cfe89ddd271abaf7210a80a7e11178758",
+            "methods": [
+                "request"
+            ]
+        },
+        {
+            "contract": "0xda65b600f7124ce6c79950c1772a36403104f2be",
+            "methods": [
+                "currentIndex"
+            ]
+        }
+    ],
+    "trusts": [],
+    "features": {},
+    "supportedstandards": [],
+    "extra": null
+}

@@ -27,6 +27,7 @@ from .tools import (
     MultiWalletDiffTool,
     ApprovalScanTool,
     ActionDraftTool,
+    MaliciousContractDetectorTool,
 )
 from .graph_orchestrator import MultiAgentOrchestrator, analyze_wallet as graph_analyze
 
@@ -82,6 +83,7 @@ def get_tools() -> List[BaseTool]:
         MultiWalletDiffTool(),
         ApprovalScanTool(),
         ActionDraftTool(),
+        MaliciousContractDetectorTool(),
     ]
 
 

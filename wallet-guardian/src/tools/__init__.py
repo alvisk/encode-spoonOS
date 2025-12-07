@@ -7,6 +7,7 @@ from .schedule_monitor import ScheduleMonitorTool, CheckMonitorTool
 from .multi_wallet_diff import MultiWalletDiffTool
 from .approval_scan import ApprovalScanTool
 from .action_draft import ActionDraftTool
+from .malicious_contract_detector import MaliciousContractDetectorTool
 
 __all__ = [
     "FlagCounterpartyRiskTool",
@@ -17,6 +18,7 @@ __all__ = [
     "ActionDraftTool",
     "GetWalletSummaryTool",
     "WalletValidityScoreTool",
+    "MaliciousContractDetectorTool",
 ]
 
 

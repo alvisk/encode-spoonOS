@@ -1004,6 +1004,137 @@ async def speak_portfolio_endpoint(request: PortfolioRequest):
 
 
 # =============================================================================
+# Malicious Contract Scanning API (for Neo Oracle)
+# =============================================================================
+
+class ContractScanRequest(BaseModel):
+    """Request for contract scanning."""
+    contract_address: str
+    chain: str = "sepolia"  # Default to Sepolia testnet
+    force_refresh: bool = False
+    use_ai: bool = True
+
+
+@app.get("/api/v2/contract-scan/{address}")
+async def scan_contract_for_malicious_patterns(
+    address: str,
+    chain: str = "sepolia",
+    format: str = "json",
+    force_refresh: bool = False,
+    use_ai: bool = True,
+):
+    """
+    Scan an Ethereum smart contract for malicious patterns.
+    
+    This endpoint is designed to be called by the Neo Oracle to analyze
+    Ethereum contracts for security issues. Returns detailed explanations
+    of why a contract is flagged as malicious.
+    
+    Args:
+        address: Ethereum contract address (0x...)
+        chain: Chain to scan - "sepolia" (default) or "ethereum" (mainnet)
+        format: Response format - "json" for full response, "oracle" for Neo Oracle compact format
+        force_refresh: Bypass cache and force fresh analysis
+        use_ai: Use AI for deep analysis (slower but more thorough)
+    
+    Returns:
+        Full analysis with detected issues, risk score, and detailed explanations
+    
+    Example:
+        GET /api/v2/contract-scan/0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413?chain=sepolia
+    """
+    try:
+        from src.tools.malicious_contract_detector import (
+            MaliciousContractDetectorTool,
+            format_for_oracle,
+        )
+        
+        detector = MaliciousContractDetectorTool()
+        result = detector.call(
+            contract_address=address,
+            chain=chain,
+            force_refresh=force_refresh,
+            use_ai=use_ai,
+        )
+        
+        # Check for errors
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        # Return appropriate format
+        if format.lower() == "oracle":
+            # Compact format for Neo Oracle
+            oracle_response = format_for_oracle(result)
+            return JSONResponse(content={
+                "oracle_response": oracle_response,
+                "address": address,
+            })
+        else:
+            # Full JSON response
+            return JSONResponse(content=result)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/contract-scan")
+async def scan_contract_post(request: ContractScanRequest):
+    """
+    Scan an Ethereum smart contract for malicious patterns (POST version).
+    
+    Same as GET but accepts parameters in request body.
+    """
+    return await scan_contract_for_malicious_patterns(
+        address=request.contract_address,
+        chain=request.chain,
+        force_refresh=request.force_refresh,
+        use_ai=request.use_ai,
+    )
+
+
+@app.get("/api/v2/contract-scan/known-malicious")
+async def list_known_malicious_contracts():
+    """
+    List all known malicious contracts in the database.
+    
+    Useful for testing and reference.
+    """
+    try:
+        from src.tools.known_malicious_contracts import (
+            KNOWN_MALICIOUS_CONTRACTS,
+            TRUSTED_CONTRACTS,
+        )
+        
+        malicious = [
+            {
+                "address": addr,
+                "name": info.name,
+                "category": info.category.value,
+                "exploit_date": info.exploit_date,
+                "amount_stolen": info.amount_stolen,
+                "description": info.description[:200] + "..." if len(info.description) > 200 else info.description,
+            }
+            for addr, info in KNOWN_MALICIOUS_CONTRACTS.items()
+        ]
+        
+        trusted = [
+            {"address": addr, "name": name}
+            for addr, name in list(TRUSTED_CONTRACTS.items())[:20]
+        ]
+        
+        return JSONResponse(content={
+            "known_malicious_count": len(malicious),
+            "known_malicious": malicious,
+            "trusted_sample_count": len(trusted),
+            "trusted_sample": trusted,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
 # Neo N3 Smart Contract Endpoints
 # =============================================================================
 

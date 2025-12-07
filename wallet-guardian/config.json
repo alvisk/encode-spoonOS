@@ -60,5 +60,7 @@
     "host": "0.0.0.0",
     "port": 8000
   },
-  "contract_hash": "0x53d203e3a44dbdde8c6c2b766fbd7673e6e27e9c"
+  "contract_hash": "0x53d203e3a44dbdde8c6c2b766fbd7673e6e27e9c",
+  "malicious_oracle_hash": "0xe02c262b7755ca1aa75acc7ebde1bde566d14e57",
+  "malicious_oracle_network": "neo_testnet"
 }
