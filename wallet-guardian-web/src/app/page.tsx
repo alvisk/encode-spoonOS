@@ -193,12 +193,7 @@ const DEFAULT_WALLET: Wallet = {
   tags: [],
 };
 
-// Helper to detect chain from address
-const detectChainFromAddress = (address: string): string => {
-  if (address.startsWith("0x") && address.length === 42) return "Ethereum";
-  if (address.startsWith("N") && address.length === 34) return "Neo N3";
-  return "Unknown";
-};
+
 
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
@@ -383,108 +378,44 @@ export default function HomePage() {
       setX402Requirements(null);
     }
 
-    try {
-      let spoonRes: Response;
+    const encoded = encodeURIComponent(scanAddress.trim());
 
-      if (usePaywalled) {
-        // Use the x402 paywalled endpoint
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
+    // Fetch wallet data and activity immediately (non-AI dependent)
+    const fetchWalletData = async () => {
+      try {
+        const [walletRes, activityRes] = await Promise.all([
+          fetch(`/api/wallets/${encoded}`),
+          fetch(`/api/wallets/${encoded}/activity`),
+        ]);
 
-        // Add payment header if provided
-        if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
-          headers["X-PAYMENT"] = effectivePaymentHeader;
-          console.log(
-            "[x402] Sending payment header:",
-            effectivePaymentHeader.substring(0, 50) + "...",
-          );
+        if (walletRes.ok) {
+          const walletJson: unknown = await walletRes.json();
+          const walletData = walletJson as Wallet;
+          setScanWallet(walletData);
         } else {
-          console.log("[x402] No payment header, initial request");
+          // Create a minimal wallet object from the address
+          const addr = scanAddress.trim();
+          const detectedChain = addr.startsWith("0x") ? "Ethereum" : "Neo N3";
+          setScanWallet({
+            address: addr,
+            label: "Scanned Wallet",
+            balanceUSD: 0,
+            riskScore: 50,
+            chains: [detectedChain],
+            lastActive: new Date().toISOString(),
+            tags: [],
+          });
         }
 
-        console.log(
-          "[x402] Making request to:",
-          `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
-        );
-
-        spoonRes = await fetch(
-          `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              prompt: `analyze wallet ${scanAddress.trim()}`,
-            }),
-          },
-        );
-
-        console.log("[x402] Response status:", spoonRes.status);
-
-        // Handle 402 Payment Required
-        if (spoonRes.status === 402) {
-          // If we already sent a payment header and still got 402, the payment was rejected
-          if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
-            const errorData = (await spoonRes.json()) as {
-              error?: string;
-              payer?: string;
-            };
-            console.error("[x402] Payment rejected:", errorData);
-            setScanError(
-              `Payment rejected: ${errorData.error ?? "Unknown error"}`,
-            );
-            setPaymentHeader(""); // Clear the invalid payment header
-            setScanStatus("error");
-            return;
-          }
-
-          const paymentData = (await spoonRes.json()) as {
-            accepts?: X402Requirements[];
-          };
-          if (paymentData.accepts && paymentData.accepts.length > 0) {
-            setX402Requirements(paymentData.accepts[0] ?? null);
-          }
-          setScanStatus("payment_required");
-          return;
+        if (activityRes.ok) {
+          const activityJson: unknown = await activityRes.json();
+          setScanActivity((activityJson as Activity[]) ?? []);
+        } else {
+          setScanActivity([]);
         }
-      } else {
-        // Use the free endpoint
-        const prompt = encodeURIComponent(
-          `analyze wallet ${scanAddress.trim()}`,
-        );
-        spoonRes = await fetch(`${SPOONOS_API_URL}/analyze?prompt=${prompt}`, {
-          method: "POST",
-        });
-      }
-
-      if (!spoonRes.ok) {
-        const err = (await spoonRes.json().catch(() => ({}))) as {
-          detail?: string;
-        };
-        throw new Error(err.detail ?? "SpoonOS API error");
-      }
-
-      const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
-      setAiAnalysis(spoonData);
-      // Start streaming the text
-      if (spoonData.result) {
-        streamText(spoonData.result);
-      }
-
-      // Also fetch local wallet data for display
-      const encoded = encodeURIComponent(scanAddress.trim());
-      const [walletRes, activityRes] = await Promise.all([
-        fetch(`/api/wallets/${encoded}`),
-        fetch(`/api/wallets/${encoded}/activity`),
-      ]);
-
-      if (walletRes.ok) {
-        const walletJson: unknown = await walletRes.json();
-        const walletData = walletJson as Wallet;
-        setScanWallet(walletData);
-      } else {
-        // Create a minimal wallet object from the address
-        // Detect chain from address format
+      } catch (err) {
+        console.error("Failed to fetch wallet data:", err);
+        // Still show minimal wallet info on error
         const addr = scanAddress.trim();
         const detectedChain = addr.startsWith("0x") ? "Ethereum" : "Neo N3";
         setScanWallet({
@@ -496,16 +427,118 @@ export default function HomePage() {
           lastActive: new Date().toISOString(),
           tags: [],
         });
-      }
-
-      if (activityRes.ok) {
-        const activityJson: unknown = await activityRes.json();
-        setScanActivity((activityJson as Activity[]) ?? []);
-      } else {
         setScanActivity([]);
       }
+    };
 
-      setScanStatus("done");
+    // Fetch AI analysis (slower, streams when complete)
+    const fetchAiAnalysis = async () => {
+      try {
+        let spoonRes: Response;
+
+        if (usePaywalled) {
+          // Use the x402 paywalled endpoint
+          const headers: HeadersInit = {
+            "Content-Type": "application/json",
+          };
+
+          // Add payment header if provided
+          if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
+            headers["X-PAYMENT"] = effectivePaymentHeader;
+            console.log(
+              "[x402] Sending payment header:",
+              effectivePaymentHeader.substring(0, 50) + "...",
+            );
+          } else {
+            console.log("[x402] No payment header, initial request");
+          }
+
+          console.log(
+            "[x402] Making request to:",
+            `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
+          );
+
+          spoonRes = await fetch(
+            `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                prompt: `analyze wallet ${scanAddress.trim()}`,
+              }),
+            },
+          );
+
+          console.log("[x402] Response status:", spoonRes.status);
+
+          // Handle 402 Payment Required
+          if (spoonRes.status === 402) {
+            // If we already sent a payment header and still got 402, the payment was rejected
+            if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
+              const errorData = (await spoonRes.json()) as {
+                error?: string;
+                payer?: string;
+              };
+              console.error("[x402] Payment rejected:", errorData);
+              setScanError(
+                `Payment rejected: ${errorData.error ?? "Unknown error"}`,
+              );
+              setPaymentHeader(""); // Clear the invalid payment header
+              setScanStatus("error");
+              return;
+            }
+
+            const paymentData = (await spoonRes.json()) as {
+              accepts?: X402Requirements[];
+            };
+            if (paymentData.accepts && paymentData.accepts.length > 0) {
+              setX402Requirements(paymentData.accepts[0] ?? null);
+            }
+            setScanStatus("payment_required");
+            return;
+          }
+        } else {
+          // Use the free endpoint
+          const prompt = encodeURIComponent(
+            `analyze wallet ${scanAddress.trim()}`,
+          );
+          spoonRes = await fetch(`${SPOONOS_API_URL}/analyze?prompt=${prompt}`, {
+            method: "POST",
+          });
+        }
+
+        if (!spoonRes.ok) {
+          const err = (await spoonRes.json().catch(() => ({}))) as {
+            detail?: string;
+          };
+          throw new Error(err.detail ?? "SpoonOS API error");
+        }
+
+        const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
+        setAiAnalysis(spoonData);
+        // Start streaming the text
+        if (spoonData.result) {
+          streamText(spoonData.result);
+        }
+      } catch (err) {
+        console.error("AI analysis failed:", err);
+        // Don't set error status - wallet data is still valid
+        // Just leave AI analysis as null
+      }
+    };
+
+    try {
+      // Start both fetches in parallel - wallet data will display immediately
+      // while AI analysis loads in the background
+      await Promise.all([
+        fetchWalletData(),
+        fetchAiAnalysis(),
+      ]);
+
+      // Only set done if we haven't already set payment_required or error
+      setScanStatus((current) => 
+        current === "loading" ? "done" : current
+      );
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Unexpected error");
       setScanStatus("error");
@@ -892,33 +925,6 @@ export default function HomePage() {
                 />
               )}
 
-              {/* Loading State - Show while scanning */}
-              {scanStatus === "loading" && (
-                <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                      <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
-                        {"//"} ANALYZING WALLET
-                      </p>
-                      <p className="font-mono text-xs text-white/60">
-                        SpoonOS Agent Processing...
-                      </p>
-                    </div>
-                    <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
-                      Scanning
-                    </Badge>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    <div className="h-3 bg-white/10 rounded animate-pulse" />
-                    <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
-                    <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
-                  </div>
-                </div>
-              )}
-
               {scanWallet ? (
                 <>
                   {/* AI ANALYSIS CARD - SpoonOS Response */}
@@ -960,7 +966,32 @@ export default function HomePage() {
                         </p>
                       </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    /* AI Loading State - Show while AI analysis is loading */
+                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                          <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                            {"//"} ANALYZING WALLET
+                          </p>
+                          <p className="font-mono text-xs text-white/60">
+                            SpoonOS Agent Processing...
+                          </p>
+                        </div>
+                        <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
+                          Analyzing
+                        </Badge>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        <div className="h-3 bg-white/10 rounded animate-pulse" />
+                        <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
+                        <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid gap-6 lg:grid-cols-2">
                     {/* WALLET INFO CARD */}
