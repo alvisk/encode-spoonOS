@@ -16,6 +16,10 @@ import {
   Plus,
   X,
   Loader2,
+  Bug,
+  FileText,
+  Copy,
+  Check,
 } from "lucide-react";
 import { PaymentFlow } from "~/components/PaymentFlow";
 import { Badge } from "~/components/ui/badge";
@@ -119,6 +123,32 @@ type ApprovalScanResult = {
   flags: string[];
 };
 
+// Malicious Contract Detector Tool Response
+type MaliciousContractResult = {
+  contract_address: string;
+  chain: string;
+  is_malicious: boolean;
+  risk_score: number;
+  risk_level: string;
+  detected_issues: Array<{
+    type: string;
+    severity: string;
+    description: string;
+  }>;
+  summary: string;
+  verified: boolean;
+  contract_name?: string;
+};
+
+// Action Draft Tool Response
+type ActionDraftResult = {
+  channel: string;
+  message: string;
+  actions: string[];
+  risk_level: string;
+  generated_at: string;
+};
+
 type NeoLineInstance = {
   EVENT: { ACCOUNT_CHANGED: string };
   getAccount: () => Promise<{ address: string }>;
@@ -217,7 +247,7 @@ export default function HomePage() {
 
   // Tool-specific state
   const [activeToolTab, setActiveToolTab] = useState<
-    "validity" | "counterparty" | "multi" | "monitor" | "approvals"
+    "validity" | "counterparty" | "multi" | "monitor" | "approvals" | "contract" | "report"
   >("validity");
 
   // Shared address for single-wallet tools
@@ -262,6 +292,20 @@ export default function HomePage() {
   const [approvalResult, setApprovalResult] =
     useState<ApprovalScanResult | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
+
+  // Malicious Contract Detector Tool
+  const [contractAddress, setContractAddress] = useState("");
+  const [contractChain, setContractChain] = useState<"ethereum" | "sepolia">("ethereum");
+  const [contractLoading, setContractLoading] = useState(false);
+  const [contractResult, setContractResult] = useState<MaliciousContractResult | null>(null);
+  const [contractError, setContractError] = useState<string | null>(null);
+
+  // Action Draft Tool
+  const [reportChannel, setReportChannel] = useState<"console" | "dm" | "email" | "tweet" | "alert">("console");
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportResult, setReportResult] = useState<ActionDraftResult | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportCopied, setReportCopied] = useState(false);
 
   const scanAlerts = useMemo(
     () =>
@@ -710,6 +754,118 @@ export default function HomePage() {
       );
     } finally {
       setApprovalLoading(false);
+    }
+  };
+
+  // Malicious Contract Detector Tool
+  const runContractScan = async () => {
+    if (!contractAddress.trim()) return;
+    setContractLoading(true);
+    setContractError(null);
+    setContractResult(null);
+    try {
+      // Call the backend v2 endpoint directly for structured data
+      const res = await fetch(
+        `${SPOONOS_API_URL}/api/v2/contract-scan/${encodeURIComponent(contractAddress.trim())}?chain=${contractChain}`,
+      );
+      
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(err.detail ?? "Contract scan failed");
+      }
+      
+      const data = (await res.json()) as MaliciousContractResult;
+      setContractResult(data);
+    } catch (err) {
+      // Fallback to SpoonOS natural language if direct endpoint fails
+      try {
+        const result = await invokeSpoonTool(
+          `scan contract ${contractAddress.trim()} on ${contractChain} for malicious patterns`,
+        );
+        // Parse the result
+        const isMalicious = result.toLowerCase().includes("malicious") || 
+                           result.toLowerCase().includes("suspicious") ||
+                           result.toLowerCase().includes("high risk");
+        const riskMatch = /risk[_\s]?score[:\s]+(\d+)/i.exec(result);
+        const riskLevelMatch = /risk[_\s]?level[:\s]+(\w+)/i.exec(result);
+        
+        setContractResult({
+          contract_address: contractAddress.trim(),
+          chain: contractChain,
+          is_malicious: isMalicious,
+          risk_score: riskMatch?.[1] ? parseInt(riskMatch[1]) : (isMalicious ? 75 : 25),
+          risk_level: riskLevelMatch?.[1] ?? (isMalicious ? "high" : "low"),
+          detected_issues: isMalicious ? [{ type: "suspicious_pattern", severity: "high", description: "AI detected potential malicious patterns" }] : [],
+          summary: result,
+          verified: false,
+        });
+      } catch {
+        setContractError(
+          err instanceof Error ? err.message : "Failed to scan contract",
+        );
+      }
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  // Action Draft Tool - Generate Report
+  const runGenerateReport = async () => {
+    if (!toolAddress.trim() && !validityResult) {
+      setReportError("Please run a validity score analysis first or enter an address");
+      return;
+    }
+    setReportLoading(true);
+    setReportError(null);
+    setReportResult(null);
+    try {
+      const targetAddress = validityResult?.address ?? toolAddress.trim();
+      const riskLevel = validityResult?.risk_level ?? "unknown";
+      const riskFlags = validityResult?.risk_flags ?? [];
+      
+      const result = await invokeSpoonTool(
+        `draft action message for wallet ${targetAddress} with risk level ${riskLevel} and flags ${riskFlags.join(", ")} for ${reportChannel} channel`,
+      );
+      
+      setReportResult({
+        channel: reportChannel,
+        message: result,
+        actions: extractActions(result),
+        risk_level: riskLevel,
+        generated_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      setReportError(
+        err instanceof Error ? err.message : "Failed to generate report",
+      );
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  // Helper to extract action items from report text
+  const extractActions = (text: string): string[] => {
+    const actions: string[] = [];
+    const lines = text.split('\n');
+    const bulletRegex = /^[-•*]\s+/;
+    const numberedRegex = /^\d+\.\s+/;
+    for (const line of lines) {
+      if (bulletRegex.exec(line) ?? numberedRegex.exec(line)) {
+        actions.push(line.replace(/^[-•*\d.]\s+/, '').trim());
+      }
+    }
+    return actions.length > 0 ? actions : ["Review wallet activity", "Monitor for changes"];
+  };
+
+  // Copy report to clipboard
+  const copyReport = async () => {
+    if (!reportResult) return;
+    try {
+      await navigator.clipboard.writeText(reportResult.message);
+      setReportCopied(true);
+      setTimeout(() => setReportCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
   };
 
@@ -1208,12 +1364,12 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
             </div>
           </div>
           <Badge className="neo-pill border-4 border-black bg-[#00FF00] font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
-            {5} Tools
+            {7} Tools
           </Badge>
         </div>
 
         {/* Shared Address Input */}
-        {activeToolTab !== "multi" && (
+        {activeToolTab !== "multi" && activeToolTab !== "contract" && (
           <div className="neo-card border-4 border-black bg-gray-50 p-4">
             <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
               Target Wallet Address
@@ -1254,6 +1410,16 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
               id: "approvals" as const,
               label: "Approval Scan",
               icon: <Shield className="h-4 w-4" strokeWidth={3} />,
+            },
+            {
+              id: "contract" as const,
+              label: "Contract Scanner",
+              icon: <Bug className="h-4 w-4" strokeWidth={3} />,
+            },
+            {
+              id: "report" as const,
+              label: "Generate Report",
+              icon: <FileText className="h-4 w-4" strokeWidth={3} />,
             },
           ].map((tab) => (
             <button
@@ -1708,6 +1874,408 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Contract Scanner Tool */}
+            {activeToolTab === "contract" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="border-4 border-black bg-[#FF0000] p-3">
+                    <Bug className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">
+                      Malicious Contract Scanner
+                    </h3>
+                    <p className="text-sm text-black/70">
+                      AI-powered analysis to detect malicious patterns in smart contracts
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
+                      Contract Address (Ethereum)
+                    </label>
+                    <input
+                      value={contractAddress}
+                      onChange={(e) => setContractAddress(e.target.value)}
+                      placeholder="0x..."
+                      className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
+                      Network
+                    </label>
+                    <div className="flex gap-2">
+                      {(["ethereum", "sepolia"] as const).map((chain) => (
+                        <button
+                          key={chain}
+                          onClick={() => setContractChain(chain)}
+                          className={`neo-pill border-3 border-black px-4 py-2 text-sm font-black uppercase ${
+                            contractChain === chain
+                              ? "bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]"
+                              : "bg-white text-black/50"
+                          }`}
+                        >
+                          {chain === "ethereum" ? "Mainnet" : "Sepolia"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Example Contracts */}
+                  <div>
+                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
+                      Try Example Contracts
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {[
+                        { 
+                          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                          name: "USDC",
+                          risk: "SAFE",
+                          color: "bg-[#00FF00]"
+                        },
+                        { 
+                          address: "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+                          name: "The DAO",
+                          risk: "CRITICAL",
+                          color: "bg-[#FF0000] text-white"
+                        },
+                        { 
+                          address: "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+                          name: "PEPE",
+                          risk: "HIGH",
+                          color: "bg-[#FFFF00]"
+                        },
+                        { 
+                          address: "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+                          name: "HEX",
+                          risk: "CRITICAL",
+                          color: "bg-[#FF0000] text-white"
+                        },
+                        { 
+                          address: "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+                          name: "SHIB",
+                          risk: "HIGH",
+                          color: "bg-[#FFFF00]"
+                        },
+                        { 
+                          address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                          name: "USDT",
+                          risk: "SAFE",
+                          color: "bg-[#00FF00]"
+                        },
+                      ].map((example) => (
+                        <button
+                          key={example.address}
+                          onClick={() => {
+                            setContractAddress(example.address);
+                            setContractChain("ethereum");
+                          }}
+                          className="flex items-center justify-between gap-2 border-3 border-black bg-white px-3 py-2 text-left shadow-[3px_3px_0_0_#000] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_#000]"
+                        >
+                          <div>
+                            <p className="text-sm font-black">{example.name}</p>
+                            <p className="font-mono text-xs text-black/50">
+                              {example.address.slice(0, 8)}...{example.address.slice(-6)}
+                            </p>
+                          </div>
+                          <span className={`neo-pill border-2 border-black px-2 py-0.5 text-xs font-black ${example.color}`}>
+                            {example.risk}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => void runContractScan()}
+                    disabled={contractLoading || !contractAddress.trim()}
+                    className="neo-button border-4 border-black bg-[#FF0000] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
+                  >
+                    {contractLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Scan Contract"
+                    )}
+                  </Button>
+                </div>
+
+                {contractError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">
+                    {contractError}
+                  </p>
+                )}
+
+                {contractResult && (
+                  <div className="space-y-4">
+                    {/* Main Result Card */}
+                    <div className={`neo-card border-4 border-black p-5 ${
+                      contractResult.is_malicious ? "bg-[#FFE5E5]" : "bg-[#E8F5E9]"
+                    }`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                            {"//"} Verdict
+                          </p>
+                          <p className="mt-2 text-2xl font-black uppercase">
+                            {contractResult.is_malicious ? "MALICIOUS" : "SAFE"}
+                          </p>
+                          <p className="mt-1 font-mono text-xs break-all">
+                            {contractResult.contract_address}
+                          </p>
+                          {contractResult.contract_name && (
+                            <p className="mt-1 text-sm font-bold">
+                              {contractResult.contract_name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <Badge className={`neo-pill border-3 border-black font-black uppercase ${
+                            contractResult.risk_score >= 70
+                              ? "bg-[#FF0000] text-white"
+                              : contractResult.risk_score >= 40
+                                ? "bg-[#FFFF00] text-black"
+                                : "bg-[#00FF00] text-black"
+                          }`}>
+                            Risk: {contractResult.risk_score}/100
+                          </Badge>
+                          <p className="mt-2 text-xs font-black uppercase">
+                            {contractResult.chain}
+                          </p>
+                          {contractResult.verified && (
+                            <Badge className="neo-pill mt-1 border-2 border-black bg-[#00BFFF] text-xs font-black text-black">
+                              Verified
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detected Issues */}
+                    {contractResult.detected_issues.length > 0 && (
+                      <div className="neo-card border-4 border-black bg-[#FFF8E1] p-5">
+                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                          {"//"} Detected Issues ({contractResult.detected_issues.length})
+                        </p>
+                        <div className="mt-4 space-y-3">
+                          {contractResult.detected_issues.map((issue, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-start gap-3 border-4 border-black bg-white p-3 shadow-[3px_3px_0_0_#000]"
+                            >
+                              <AlertTriangle className={`h-5 w-5 shrink-0 ${
+                                issue.severity === "critical" || issue.severity === "high"
+                                  ? "text-[#FF0000]"
+                                  : issue.severity === "medium"
+                                    ? "text-[#FFAA00]"
+                                    : "text-[#00BFFF]"
+                              }`} />
+                              <div>
+                                <p className="text-sm font-black uppercase">
+                                  {issue.type.replace(/_/g, " ")}
+                                </p>
+                                <p className="mt-1 text-xs text-black/70">
+                                  {issue.description}
+                                </p>
+                                <Badge className={`neo-pill mt-2 border-2 border-black text-xs font-black uppercase ${
+                                  issue.severity === "critical" ? "bg-[#FF0000] text-white" :
+                                  issue.severity === "high" ? "bg-[#FFAA00] text-black" :
+                                  issue.severity === "medium" ? "bg-[#FFFF00] text-black" :
+                                  "bg-[#00BFFF] text-black"
+                                }`}>
+                                  {issue.severity}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    {contractResult.summary && (
+                      <div className="neo-card border-4 border-black bg-white p-5">
+                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                          {"//"} AI Analysis Summary
+                        </p>
+                        <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap">
+                          {contractResult.summary}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Generate Report Tool */}
+            {activeToolTab === "report" && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="border-4 border-black bg-[#9C27B0] p-3">
+                    <FileText className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase">
+                      Generate Action Report
+                    </h3>
+                    <p className="text-sm text-black/70">
+                      Create formatted security reports for different channels
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
+                      Output Channel
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {(["console", "dm", "email", "tweet", "alert"] as const).map((channel) => (
+                        <button
+                          key={channel}
+                          onClick={() => setReportChannel(channel)}
+                          className={`neo-pill border-3 border-black px-4 py-2 text-sm font-black uppercase ${
+                            reportChannel === channel
+                              ? "bg-[#9C27B0] text-white shadow-[3px_3px_0_0_#000]"
+                              : "bg-white text-black/50"
+                          }`}
+                        >
+                          {channel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="neo-card border-4 border-black bg-gray-50 p-4">
+                    <p className="text-xs font-black tracking-wider text-black/60 uppercase">
+                      Source Data
+                    </p>
+                    {validityResult ? (
+                      <div className="mt-2">
+                        <p className="font-mono text-sm">{validityResult.address}</p>
+                        <div className="mt-1 flex gap-2">
+                          <Badge className={`neo-pill border-2 border-black text-xs font-black ${
+                            validityResult.risk_level === "clean" || validityResult.risk_level === "low"
+                              ? "bg-[#00FF00] text-black"
+                              : validityResult.risk_level === "moderate"
+                                ? "bg-[#FFFF00] text-black"
+                                : "bg-[#FF0000] text-white"
+                          }`}>
+                            {validityResult.risk_level}
+                          </Badge>
+                          <Badge className="neo-pill border-2 border-black bg-white text-xs font-black text-black">
+                            Score: {validityResult.score}
+                          </Badge>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-black/50">
+                        Run a Validity Score analysis first, or enter an address in the shared input above
+                      </p>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={() => void runGenerateReport()}
+                    disabled={reportLoading || (!toolAddress.trim() && !validityResult)}
+                    className="neo-button border-4 border-black bg-[#9C27B0] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
+                  >
+                    {reportLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Generate Report"
+                    )}
+                  </Button>
+                </div>
+
+                {reportError && (
+                  <p className="text-sm font-black text-[#FF0000] uppercase">
+                    {reportError}
+                  </p>
+                )}
+
+                {reportResult && (
+                  <div className="space-y-4">
+                    {/* Report Header */}
+                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-5 text-white">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-black tracking-widest text-[#9C27B0] uppercase">
+                            {"//"} Generated Report
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <Badge className="neo-pill border-2 border-white/30 bg-[#9C27B0] text-xs font-black text-white uppercase">
+                              {reportResult.channel}
+                            </Badge>
+                            <Badge className={`neo-pill border-2 border-white/30 text-xs font-black uppercase ${
+                              reportResult.risk_level === "clean" || reportResult.risk_level === "low"
+                                ? "bg-[#00FF00] text-black"
+                                : reportResult.risk_level === "moderate"
+                                  ? "bg-[#FFFF00] text-black"
+                                  : "bg-[#FF0000] text-white"
+                            }`}>
+                              {reportResult.risk_level}
+                            </Badge>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => void copyReport()}
+                          className="neo-button border-2 border-white/30 bg-white/10 px-3 py-2 text-white hover:bg-white/20"
+                        >
+                          {reportCopied ? (
+                            <Check className="h-4 w-4 text-[#00FF00]" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Report Content */}
+                    <div className="neo-card border-4 border-black bg-white p-5">
+                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                        {"//"} Message Content
+                      </p>
+                      <div className="mt-3 whitespace-pre-wrap rounded border-2 border-black/20 bg-gray-50 p-4 font-mono text-sm">
+                        {reportResult.message}
+                      </div>
+                    </div>
+
+                    {/* Recommended Actions */}
+                    {reportResult.actions.length > 0 && (
+                      <div className="neo-card border-4 border-black bg-[#E3F2FD] p-5">
+                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                          {"//"} Recommended Actions
+                        </p>
+                        <ul className="mt-3 space-y-2">
+                          {reportResult.actions.map((action, idx) => (
+                            <li
+                              key={idx}
+                              className="flex items-start gap-2 text-sm font-medium"
+                            >
+                              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center bg-black text-xs font-black text-white">
+                                {idx + 1}
+                              </span>
+                              {action}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-black/50">
+                      Generated at {new Date(reportResult.generated_at).toLocaleString()}
+                    </p>
                   </div>
                 )}
               </div>
