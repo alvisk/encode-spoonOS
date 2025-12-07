@@ -1,29 +1,97 @@
-# Create T3 App
+# Wallet Guardian Web
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+Next.js frontend for the Wallet Guardian SpoonOS agent with a brutalist UI design.
 
-## What's next? How do I make an app with this?
+## Features
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- **Wallet Dashboard**: Real-time wallet analysis with risk scores and transaction history
+- **Voice Announcements**: Audio alerts for security events (via ElevenLabs)
+- **Payment Flow**: x402 payment integration for premium analysis
+- **Multi-Chain Support**: Auto-detects Neo N3 and Ethereum addresses
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Tech Stack
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+- **Framework**: Next.js 14 (App Router)
+- **Styling**: TailwindCSS with brutalist design system
+- **Web3**: wagmi + viem for wallet connections
+- **UI Components**: shadcn/ui
 
-## Learn More
+## Getting Started
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+### Prerequisites
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+- Node.js 18+
+- pnpm
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+### Installation
 
-## How do I deploy this?
+```bash
+pnpm install
+```
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+### Development
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Build
+
+```bash
+pnpm build
+```
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── api/              # API routes (alerts, spoonos, summary, voice, wallets)
+│   ├── about/            # About page
+│   ├── layout.tsx        # Root layout
+│   └── page.tsx          # Home page
+├── components/
+│   ├── presentation/     # Animated sections, feature cards, flow diagrams
+│   ├── ui/               # shadcn/ui components
+│   ├── PaymentFlow.tsx   # x402 payment integration
+│   ├── WalletProvider.tsx
+│   └── WalletToolsDashboard.tsx
+├── hooks/
+│   └── useVoiceAnnouncements.ts
+├── lib/
+│   ├── mockData.ts       # Demo data
+│   ├── utils.ts          # Utility functions
+│   └── wagmi.ts          # Web3 configuration
+└── styles/
+    └── globals.css
+```
+
+## API Routes
+
+| Route | Description |
+|-------|-------------|
+| `/api/wallets` | List wallets |
+| `/api/wallets/[address]` | Get wallet details |
+| `/api/wallets/[address]/activity` | Get wallet activity |
+| `/api/summary` | Get wallet summary |
+| `/api/alerts` | Get security alerts |
+| `/api/voice` | Voice announcement generation |
+| `/api/spoonos` | Proxy to SpoonOS agent |
+
+## Environment Variables
+
+Create a `.env.local` file:
+
+```bash
+# SpoonOS API
+NEXT_PUBLIC_SPOONOS_API_URL=https://encode-spoonos-production.up.railway.app
+
+# Optional: ElevenLabs for voice
+ELEVENLABS_API_KEY=...
+```
+
+## License
+
+MIT

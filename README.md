@@ -1,50 +1,66 @@
-# Neo Wallet Guardian - SpoonOS Agent
+# SpoonOS Hackathon - Wallet Guardian
 
-AI-powered wallet security analysis for Neo N3 blockchain, built on SpoonOS with x402 payment support.
+AI-powered multi-chain wallet security agent built on **SpoonOS** with **Neo N3 Oracle** integration.
+
+> **Track**: AI Agent with Web3  
+> **Hackathon**: Encode x SpoonOS (December 2025)
 
 ## Live Demo
 
-**SpoonOS API:** https://encode-spoonos-production.up.railway.app
+| Resource | URL |
+|----------|-----|
+| **API** | https://encode-spoonos-production.up.railway.app |
+| **Docs** | https://encode-spoonos-production.up.railway.app/docs |
 
 ### Quick Test
 
 ```bash
-# Health Check
+# Health check
 curl https://encode-spoonos-production.up.railway.app/health
 
-# Analyze a Neo N3 Wallet (Real blockchain data)
+# Analyze a Neo N3 wallet
 curl -X POST "https://encode-spoonos-production.up.railway.app/analyze?prompt=analyze%20wallet%20NLapRhQFQDDCjAht7mPScrFRb7pTNn4QzT"
 
-# x402 Payment Requirements
+# Get x402 payment requirements
 curl https://encode-spoonos-production.up.railway.app/x402/requirements
-
-# x402 Paywalled Endpoint (requires payment)
-curl -X POST https://encode-spoonos-production.up.railway.app/x402/invoke/wallet-guardian \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "analyze wallet NLapRhQFQDDCjAht7mPScrFRb7pTNn4QzT"}'
 ```
 
 ## Features
 
 - **AI-Powered Analysis**: Uses Gemini AI via SpoonOS ToolCallAgent for intelligent wallet risk assessment
 - **Real Neo N3 Data**: Fetches live on-chain balances and transfers via Neo RPC
+- **Malicious Contract Detection**: Scans Ethereum smart contracts for honeypots, rug pulls, and vulnerabilities
 - **x402 Payments**: Native x402 payment gateway on Base Sepolia (0.01 USDC per request)
-- **Risk Scoring**: Computes validity scores based on concentration, stablecoin ratio, counterparty diversity
+- **Neo Oracle Contract**: On-chain risk scores via Neo's native Oracle service
+- **Voice Alerts**: ElevenLabs-powered audio notifications for critical security events
 
-## API Endpoints
+## Architecture
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check and agent info |
-| `/agents` | GET | List available agents |
-| `/analyze` | POST | Free tier wallet analysis |
-| `/x402/requirements` | GET | x402 payment requirements |
-| `/x402/invoke/wallet-guardian` | POST | Paywalled analysis (requires X-PAYMENT header) |
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Frontend      │────▶│  SpoonOS Agent   │────▶│  Neo N3 RPC     │
+│  (Next.js)      │     │  (Railway)       │     │  (Testnet)      │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                    ┌──────────┼──────────┐
+                    ▼          ▼          ▼
+              ┌──────────┐ ┌───────┐ ┌──────────┐
+              │ Gemini   │ │ Neo   │ │ Ethereum │
+              │ AI       │ │Oracle │ │ Scanner  │
+              └──────────┘ └───────┘ └──────────┘
+```
 
-## Projects
+## Documentation
 
-### `wallet-guardian/`
-Neo Wallet Guardian SpoonOS agent. The core AI agent that analyzes Neo N3 wallets.
+| Component | Description | Docs |
+|-----------|-------------|------|
+| **wallet-guardian** | Core SpoonOS agent - AI wallet analysis, Neo N3 integration, 8 custom tools | [README](./wallet-guardian/README.md) |
+| **wallet-guardian-web** | Next.js frontend with brutalist UI design | [README](./wallet-guardian-web/README.md) |
+| **workflow** | AIOZ compute offloading design document | [README](./workflow/README.md) |
+
+## Quick Start
+
+### Backend (SpoonOS Agent)
 
 ```bash
 cd wallet-guardian
@@ -54,8 +70,7 @@ pip install -r requirements.txt
 python spoonos_server.py
 ```
 
-### `wallet-guardian-web/`
-Next.js frontend with brutalist UI design. Integrates with the live SpoonOS API.
+### Frontend (Next.js)
 
 ```bash
 cd wallet-guardian-web
@@ -65,27 +80,14 @@ pnpm dev
 
 ## Tech Stack
 
-- **Agent Framework**: SpoonOS (spoon-ai-sdk)
-- **LLM**: Gemini 2.0 Flash
-- **Blockchain**: Neo N3 (Testnet)
-- **Payments**: x402 Protocol on Base Sepolia
-- **Hosting**: Railway
-- **Frontend**: Next.js, TailwindCSS
-
-## Architecture
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│   Frontend      │────▶│  SpoonOS Agent   │────▶│  Neo N3 RPC │
-│  (Next.js)      │     │  (Railway)       │     │  (Testnet)  │
-└─────────────────┘     └──────────────────┘     └─────────────┘
-                               │
-                               ▼
-                        ┌──────────────┐
-                        │  Gemini AI   │
-                        │  (Analysis)  │
-                        └──────────────┘
-```
+| Component | Technology |
+|-----------|------------|
+| Agent Framework | SpoonOS (spoon-ai-sdk) |
+| LLM | Gemini 2.0 Flash |
+| Blockchain | Neo N3 (Testnet), Ethereum |
+| Payments | x402 Protocol on Base Sepolia |
+| Hosting | Railway |
+| Frontend | Next.js, TailwindCSS |
 
 ## Environment Variables
 
@@ -102,6 +104,19 @@ X402_DEFAULT_AMOUNT_USDC=0.01
 # Neo RPC
 NEO_RPC_URL=https://testnet1.neo.coz.io:443
 ```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check and agent info |
+| `/agents` | GET | List available agents |
+| `/analyze` | POST | Free tier wallet analysis |
+| `/x402/requirements` | GET | x402 payment requirements |
+| `/x402/invoke/wallet-guardian` | POST | Paywalled analysis (requires X-PAYMENT header) |
+| `/api/v2/contract-scan/{address}` | GET | Malicious contract scan |
+
+See [wallet-guardian/README.md](./wallet-guardian/README.md) for full API documentation.
 
 ## License
 
