@@ -366,3 +366,235 @@ export function OffloadDecisionDiagram() {
     </div>
   )
 }
+
+// Neo Oracle Flow Diagram
+export function OracleFlowDiagram() {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-50px" })
+
+  const steps = [
+    { 
+      num: "1", 
+      title: "REQUEST", 
+      desc: "dApp calls request_risk_score(address)",
+      icon: "📤",
+      color: "main" as const,
+    },
+    { 
+      num: "2", 
+      title: "ORACLE", 
+      desc: "Neo Oracle fetches from Wallet Guardian API",
+      icon: "🔮",
+      color: "accent" as const,
+    },
+    { 
+      num: "3", 
+      title: "CALLBACK", 
+      desc: "oracle_callback stores score on-chain",
+      icon: "💾",
+      color: "main" as const,
+    },
+    { 
+      num: "4", 
+      title: "QUERY", 
+      desc: "Any contract calls is_risky(address, 60)",
+      icon: "✅",
+      color: "default" as const,
+    },
+  ]
+
+  return (
+    <div ref={ref} className="w-full py-8">
+      {/* Flow boxes */}
+      <div className="flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-2">
+        {steps.map((step, index) => (
+          <div key={step.num} className="flex items-center">
+            <motion.div
+              initial={{ opacity: 0, y: 30, scale: 0.8 }}
+              animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+                delay: index * 0.2,
+              }}
+              className={cn(
+                "border-4 p-4 min-w-[160px] text-center relative",
+                step.color === "main" 
+                  ? "bg-[var(--main)] border-border text-black"
+                  : step.color === "accent"
+                  ? "bg-[var(--chart-5)] border-border text-black"
+                  : "bg-secondary-background border-border"
+              )}
+              style={{ boxShadow: "var(--shadow)" }}
+            >
+              {/* Step number badge */}
+              <div className="absolute -top-3 -left-3 w-8 h-8 bg-black border-2 border-border flex items-center justify-center">
+                <span className="font-heading text-sm text-white">{step.num}</span>
+              </div>
+              <div className="text-2xl mb-1">{step.icon}</div>
+              <div className="font-heading text-sm uppercase tracking-wider">
+                {step.title}
+              </div>
+              <div className="text-xs opacity-70 mt-1">
+                {step.desc}
+              </div>
+            </motion.div>
+
+            {/* Arrow connector (not on last item) */}
+            {index < steps.length - 1 && (
+              <motion.div
+                initial={{ opacity: 0, scaleX: 0 }}
+                animate={isInView ? { opacity: 1, scaleX: 1 } : {}}
+                transition={{ delay: index * 0.2 + 0.15 }}
+                className="hidden lg:flex items-center mx-2"
+              >
+                <div className="w-8 h-1 bg-border" />
+                <div className="w-0 h-0 border-y-[6px] border-y-transparent border-l-[10px] border-l-border" />
+              </motion.div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom note */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : {}}
+        transition={{ delay: 1 }}
+        className="text-center mt-8"
+      >
+        <span className="neo-pill text-xs">TRUSTLESS ON-CHAIN RISK VERIFICATION</span>
+      </motion.div>
+    </div>
+  )
+}
+
+// Updated Architecture Diagram with multi-chain support
+export function MultiChainArchitectureDiagram() {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-100px" })
+
+  return (
+    <div ref={ref} className="w-full overflow-x-auto py-8">
+      <div className="min-w-[900px] mx-auto">
+        {/* Top row - Client to Agent */}
+        <div className="flex items-center justify-center mb-8">
+          <FlowBox 
+            title="CLIENT" 
+            subtitle="Web / CLI / dApp" 
+            icon="👤"
+            delay={0}
+          />
+          <Connector delay={0.2} length={60} />
+          <FlowBox 
+            title="x402 GATEWAY" 
+            subtitle="Pay per invoke" 
+            icon="💳"
+            color="accent"
+            delay={0.3}
+          />
+          <Connector delay={0.5} length={60} />
+          <FlowBox 
+            title="SPOONOS AGENT" 
+            subtitle="ToolCallAgent" 
+            icon="🤖"
+            color="main"
+            delay={0.6}
+          />
+        </div>
+
+        {/* Vertical connector from Agent */}
+        <div className="flex justify-center">
+          <div className="flex flex-col items-center" style={{ marginLeft: 350 }}>
+            <Connector direction="vertical" delay={0.8} length={40} />
+          </div>
+        </div>
+
+        {/* Graph Orchestrator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.9 }}
+          className="flex justify-center mb-4"
+        >
+          <div className="neo-card p-3 border-4 border-[var(--main)]">
+            <span className="font-heading text-sm uppercase">GRAPH ORCHESTRATOR</span>
+            <span className="text-xs opacity-60 ml-2">DAG Computation</span>
+          </div>
+        </motion.div>
+
+        {/* Vertical connector */}
+        <div className="flex justify-center">
+          <Connector direction="vertical" delay={1.0} length={30} />
+        </div>
+
+        {/* Tool layer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1.1 }}
+          className="flex justify-center gap-3 mb-8 flex-wrap"
+        >
+          {[
+            { title: "WALLET", icon: "📊" },
+            { title: "RISK", icon: "⚠️" },
+            { title: "SCANNER", icon: "🔍" },
+            { title: "MONITOR", icon: "🔔" },
+            { title: "PORTFOLIO", icon: "💼" },
+          ].map((tool, i) => (
+            <FlowBox 
+              key={tool.title}
+              title={tool.title} 
+              icon={tool.icon}
+              delay={1.2 + i * 0.08}
+            />
+          ))}
+        </motion.div>
+
+        {/* Label for tools */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 1.6 }}
+          className="text-center mb-8"
+        >
+          <span className="neo-pill text-xs">8 SPOONOS TOOLS</span>
+        </motion.div>
+
+        {/* Bottom connectors to external services */}
+        <div className="flex justify-center gap-12">
+          <div className="flex flex-col items-center">
+            <Connector direction="vertical" delay={1.7} length={40} />
+            <FlowBox 
+              title="NEO N3" 
+              subtitle="+ Oracle Contract" 
+              icon="⛓️"
+              color="main"
+              delay={1.9}
+            />
+          </div>
+          <div className="flex flex-col items-center">
+            <Connector direction="vertical" delay={1.8} length={40} />
+            <FlowBox 
+              title="ETHEREUM" 
+              subtitle="Blockscout API" 
+              icon="🔷"
+              color="accent"
+              delay={2.0}
+            />
+          </div>
+          <div className="flex flex-col items-center">
+            <Connector direction="vertical" delay={1.85} length={40} />
+            <FlowBox 
+              title="BASE SEPOLIA" 
+              subtitle="x402 Payments" 
+              icon="💰"
+              delay={2.1}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

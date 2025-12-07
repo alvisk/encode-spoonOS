@@ -20,7 +20,10 @@ import {
   FileText,
   Copy,
   Check,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import { useVoiceAnnouncements } from "~/hooks/useVoiceAnnouncements";
 import { PaymentFlow } from "~/components/PaymentFlow";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -228,12 +231,18 @@ const DEFAULT_WALLET: Wallet = {
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
   
+  // Voice announcements hook
+  const voice = useVoiceAnnouncements();
+  
   // Aggregate activities from all wallets and sort by timestamp
   const allActivities = Object.values(mockActivityByAddress)
     .flat()
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const activities = allActivities;
 
+  // Scanner mode toggle
+  const [scannerMode, setScannerMode] = useState<"wallet" | "contract">("wallet");
+  
   const [scanAddress, setScanAddress] = useState("");
   const [scanStatus, setScanStatus] = useState<
     "idle" | "loading" | "error" | "done" | "payment_required"
@@ -252,7 +261,7 @@ export default function HomePage() {
 
   // Tool-specific state
   const [activeToolTab, setActiveToolTab] = useState<
-    "validity" | "counterparty" | "multi" | "monitor" | "approvals" | "contract" | "report"
+    "validity" | "counterparty" | "multi" | "monitor" | "approvals" | "report"
   >("validity");
 
   // Shared address for single-wallet tools
@@ -322,6 +331,10 @@ export default function HomePage() {
 
   // Abort controller for cancelling streaming requests
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Track previous values for voice announcements
+  const prevAiAnalysisRef = useRef<SpoonOSAnalysis | null>(null);
+  const prevContractResultRef = useRef<MaliciousContractResult | null>(null);
 
   // Stop streaming when component unmounts or new scan starts
   useEffect(() => {
@@ -330,6 +343,44 @@ export default function HomePage() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  // Voice announcement when AI analysis completes
+  useEffect(() => {
+    if (
+      aiAnalysis && 
+      aiAnalysis !== prevAiAnalysisRef.current && 
+      scanWallet?.address &&
+      !isStreaming
+    ) {
+      // Extract risk level from the analysis text
+      const riskMatch = /risk[:\s]*level[:\s]*(\w+)/i.exec(aiAnalysis.result);
+      const riskLevel = riskMatch?.[1] ?? "unknown";
+      
+      // Extract a brief summary (first sentence or key finding)
+      const firstSentence = aiAnalysis.result.split(/[.!?]/)[0];
+      const keyFinding = firstSentence && firstSentence.length < 150 
+        ? firstSentence.trim() 
+        : undefined;
+      
+      voice.speakAIAnalysis(scanWallet.address, riskLevel, keyFinding);
+      prevAiAnalysisRef.current = aiAnalysis;
+    }
+  }, [aiAnalysis, scanWallet?.address, isStreaming, voice]);
+
+  // Voice announcement when contract scan completes
+  useEffect(() => {
+    if (
+      contractResult && 
+      contractResult !== prevContractResultRef.current
+    ) {
+      voice.speakContractVerdict(
+        contractResult.is_malicious,
+        contractResult.contract_address,
+        contractResult.risk_score
+      );
+      prevContractResultRef.current = contractResult;
+    }
+  }, [contractResult, voice]);
 
   // Connect to NeoLine dAPI once the provider signals READY.
   useEffect(() => {
@@ -934,7 +985,7 @@ export default function HomePage() {
                 generates actionable alerts.
               </p>
             </div>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <Button
                 asChild
                 className="neo-button border-4 border-black bg-white font-bold tracking-wider text-black uppercase shadow-[8px_8px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none"
@@ -950,6 +1001,31 @@ export default function HomePage() {
               >
                 <a href="#ui">Command Center</a>
               </Button>
+              
+              {/* Voice Toggle Button */}
+              <Button
+                onClick={voice.toggleEnabled}
+                className={`neo-button border-4 border-black px-4 font-bold tracking-wider uppercase shadow-[8px_8px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none ${
+                  voice.config.enabled 
+                    ? "bg-[#00FF00] text-black" 
+                    : "bg-gray-300 text-black/50"
+                }`}
+                title={voice.config.enabled ? "Voice alerts enabled" : "Voice alerts disabled"}
+              >
+                {voice.config.enabled ? (
+                  <Volume2 className="h-5 w-5" strokeWidth={3} />
+                ) : (
+                  <VolumeX className="h-5 w-5" strokeWidth={3} />
+                )}
+                <span className="ml-2 hidden sm:inline">
+                  {voice.config.enabled ? "Voice On" : "Voice Off"}
+                </span>
+              </Button>
+              {voice.isSpeaking && (
+                <span className="animate-pulse text-xs font-black text-[#00FF00] uppercase">
+                  Speaking...
+                </span>
+              )}
             </div>
           </div>
           <div className="neo-card flex flex-col gap-3 border-4 border-black bg-black px-6 py-5 text-sm text-white shadow-[8px_8px_0_0_#FFFF00]">
@@ -1015,21 +1091,55 @@ export default function HomePage() {
         </div>
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="neo-card border-black bg-white lg:col-span-2">
-            <CardHeader className="flex flex-row items-start justify-between gap-4 border-b-4 border-black pb-6">
-              <div>
-                <CardTitle className="text-2xl font-black tracking-wide uppercase">
-                  Wallet Scanner
-                </CardTitle>
-                <CardDescription className="mt-1 font-medium text-black/70">
-                  Input a Neo N3 or Ethereum address for instant security
-                  analysis.
-                </CardDescription>
+            <CardHeader className="flex flex-col gap-4 border-b-4 border-black pb-6">
+              {/* Scanner Mode Tabs */}
+              <div className="flex">
+                <button
+                  onClick={() => setScannerMode("wallet")}
+                  className={`flex items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors min-w-[200px] ${
+                    scannerMode === "wallet"
+                      ? "bg-[#00FF00] text-black border-r-0"
+                      : "bg-white text-black/50 hover:bg-gray-100 border-r-0"
+                  }`}
+                >
+                  <ShieldCheck className="h-5 w-5 shrink-0" strokeWidth={3} />
+                  <span>Wallet Scanner</span>
+                </button>
+                <button
+                  onClick={() => setScannerMode("contract")}
+                  className={`flex items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors min-w-[200px] ${
+                    scannerMode === "contract"
+                      ? "bg-[#FF0000] text-white"
+                      : "bg-white text-black/50 hover:bg-gray-100"
+                  }`}
+                >
+                  <Bug className="h-5 w-5 shrink-0" strokeWidth={3} />
+                  <span>Contract Scanner</span>
+                </button>
               </div>
-              <Badge className="neo-pill border-4 border-black bg-[#FFFF00] font-black text-black uppercase shadow-[6px_6px_0_0_#000]">
-                Beta
-              </Badge>
+              
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-2xl font-black tracking-wide uppercase">
+                    {scannerMode === "wallet" ? "Wallet Scanner" : "Contract Scanner"}
+                  </CardTitle>
+                  <CardDescription className="mt-1 font-medium text-black/70">
+                    {scannerMode === "wallet" 
+                      ? "Input a Neo N3 or Ethereum address for instant security analysis."
+                      : "Scan Ethereum smart contracts for malicious patterns using AI."}
+                  </CardDescription>
+                </div>
+                <Badge className={`neo-pill border-4 border-black font-black text-black uppercase shadow-[6px_6px_0_0_#000] ${
+                  scannerMode === "wallet" ? "bg-[#FFFF00]" : "bg-[#FF6600] text-white"
+                }`}>
+                  {scannerMode === "wallet" ? "Beta" : "AI Powered"}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
+              {/* WALLET SCANNER CONTENT */}
+              {scannerMode === "wallet" && (
+                <>
               <div className="flex flex-col gap-3">
                 <label
                   className="text-sm font-black tracking-wider text-black uppercase"
@@ -1114,6 +1224,11 @@ export default function HomePage() {
                     console.log(
                       "[x402] Payment complete, retrying with header length:",
                       signedPaymentHeader.length,
+                    );
+                    // Voice announcement for payment completion
+                    voice.speakAlert(
+                      "Payment authorized successfully. Starting wallet analysis.",
+                      "info"
                     );
                     // Pass payment header directly to avoid React state timing issues
                     void runSelfScan(signedPaymentHeader);
@@ -1333,6 +1448,211 @@ export default function HomePage() {
                   </p>
                 </div>
               )}
+                </>
+              )}
+
+              {/* CONTRACT SCANNER CONTENT */}
+              {scannerMode === "contract" && (
+                <>
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3">
+                      <label className="text-sm font-black tracking-wider text-black uppercase">
+                        Contract Address
+                      </label>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          value={contractAddress}
+                          onChange={(e) => setContractAddress(e.target.value)}
+                          placeholder="Enter Ethereum contract address (0x...)"
+                          className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[6px_6px_0_0_#000] transition-none focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[4px_4px_0_0_#000] focus:outline-none"
+                        />
+                        <Button
+                          onClick={() => void runContractScan()}
+                          disabled={contractLoading || !contractAddress.trim()}
+                          className="neo-button border-4 border-black bg-[#FF0000] px-8 font-black tracking-wider text-white uppercase shadow-[6px_6px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none disabled:opacity-50"
+                        >
+                          {contractLoading ? "SCANNING..." : "SCAN"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-black tracking-wider text-black/60 uppercase">
+                        Network:
+                      </span>
+                      <div className="flex gap-2">
+                        {(["ethereum", "sepolia"] as const).map((chain) => (
+                          <button
+                            key={chain}
+                            onClick={() => setContractChain(chain)}
+                            className={`neo-pill border-3 border-black px-4 py-2 text-xs font-black uppercase ${
+                              contractChain === chain
+                                ? "bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]"
+                                : "bg-white text-black/50 hover:bg-gray-100"
+                            }`}
+                          >
+                            {chain === "ethereum" ? "Mainnet" : "Sepolia"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {contractError && (
+                      <p className="text-sm font-black tracking-wide text-[#FF0000] uppercase">
+                        ERROR: {contractError}
+                      </p>
+                    )}
+                  </div>
+
+                  {contractResult ? (
+                    <div className="space-y-6">
+                      {/* Main Verdict Card */}
+                      <div className={`neo-card border-4 border-black p-6 ${
+                        contractResult.is_malicious 
+                          ? "bg-gradient-to-br from-[#FFE5E5] to-[#FFCCCC]" 
+                          : "bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9]"
+                      }`}>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              {contractResult.is_malicious ? (
+                                <div className="border-4 border-black bg-[#FF0000] p-2">
+                                  <AlertTriangle className="h-6 w-6 text-white" strokeWidth={3} />
+                                </div>
+                              ) : (
+                                <div className="border-4 border-black bg-[#00FF00] p-2">
+                                  <ShieldCheck className="h-6 w-6 text-black" strokeWidth={3} />
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-3xl font-black uppercase">
+                                  {contractResult.is_malicious ? "MALICIOUS" : "SAFE"}
+                                </p>
+                                <p className="text-sm font-bold text-black/70">
+                                  Contract Analysis Complete
+                                </p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs font-black tracking-widest text-black/60 uppercase">
+                                Contract Address
+                              </p>
+                              <p className="mt-1 font-mono text-sm break-all">
+                                {contractResult.contract_address}
+                              </p>
+                              {contractResult.contract_name && (
+                                <p className="mt-1 text-sm font-bold">
+                                  {contractResult.contract_name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right space-y-2">
+                            <div className={`neo-pill border-4 border-black px-4 py-2 font-black ${
+                              contractResult.risk_score >= 70
+                                ? "bg-[#FF0000] text-white"
+                                : contractResult.risk_score >= 40
+                                  ? "bg-[#FFFF00] text-black"
+                                  : "bg-[#00FF00] text-black"
+                            }`}>
+                              <p className="text-2xl">{contractResult.risk_score}</p>
+                              <p className="text-xs uppercase">/100 Risk</p>
+                            </div>
+                            <Badge className="neo-pill border-2 border-black bg-[#00BFFF] text-xs font-black text-black uppercase">
+                              {contractResult.chain}
+                            </Badge>
+                            {contractResult.verified && (
+                              <Badge className="neo-pill border-2 border-black bg-white text-xs font-black text-black">
+                                Verified
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detected Issues */}
+                      {contractResult.detected_issues.length > 0 && (
+                        <div className="neo-card border-4 border-black bg-[#FFF8E1] p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <p className="text-xs font-black tracking-widest text-black uppercase">
+                              {"//"} Detected Issues
+                            </p>
+                            <Badge className="neo-pill border-3 border-black bg-[#FF0000] text-xs font-black text-white uppercase">
+                              {contractResult.detected_issues.length} Found
+                            </Badge>
+                          </div>
+                          <div className="space-y-3">
+                            {contractResult.detected_issues.map((issue, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-start gap-3 border-4 border-black bg-white p-4 shadow-[4px_4px_0_0_#000]"
+                              >
+                                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${
+                                  issue.severity === "critical" || issue.severity === "high"
+                                    ? "text-[#FF0000]"
+                                    : issue.severity === "medium"
+                                      ? "text-[#FFAA00]"
+                                      : "text-[#00BFFF]"
+                                }`} strokeWidth={3} />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-black uppercase">
+                                      {issue.type.replace(/_/g, " ")}
+                                    </p>
+                                    <Badge className={`neo-pill border-2 border-black text-xs font-black uppercase ${
+                                      issue.severity === "critical" ? "bg-[#FF0000] text-white" :
+                                      issue.severity === "high" ? "bg-[#FFAA00] text-black" :
+                                      issue.severity === "medium" ? "bg-[#FFFF00] text-black" :
+                                      "bg-[#00BFFF] text-black"
+                                    }`}>
+                                      {issue.severity}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 text-sm text-black/70">
+                                    {issue.description}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI Summary */}
+                      {contractResult.summary && (
+                        <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="rounded border-2 border-black bg-[#FF0000] p-2">
+                              <Bot className="h-5 w-5 text-white" strokeWidth={3} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-black tracking-widest text-[#FF6600] uppercase">
+                                {"//"} AI Analysis
+                              </p>
+                              <p className="font-mono text-xs text-white/60">
+                                Malicious Pattern Detection
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap text-white/90">
+                            {contractResult.summary}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border-4 border-dashed border-black/30 p-8 text-center">
+                      <Bug className="mx-auto h-12 w-12 text-black/30 mb-3" strokeWidth={2} />
+                      <p className="text-sm font-bold tracking-wide text-black/50 uppercase">
+                        Enter a contract address to scan for malicious patterns.
+                      </p>
+                      <p className="mt-2 text-xs text-black/40">
+                        Supports Ethereum Mainnet and Sepolia testnet
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -1409,12 +1729,12 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
             </div>
           </div>
           <Badge className="neo-pill border-4 border-black bg-[#00FF00] font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
-            {7} Tools
+            {6} Tools
           </Badge>
         </div>
 
         {/* Shared Address Input */}
-        {activeToolTab !== "multi" && activeToolTab !== "contract" && (
+        {activeToolTab !== "multi" && (
           <div className="neo-card border-4 border-black bg-gray-50 p-4">
             <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
               Target Wallet Address
@@ -1455,11 +1775,6 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
               id: "approvals" as const,
               label: "Approval Scan",
               icon: <Shield className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "contract" as const,
-              label: "Contract Scanner",
-              icon: <Bug className="h-4 w-4" strokeWidth={3} />,
             },
             {
               id: "report" as const,
@@ -1924,244 +2239,6 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
               </div>
             )}
 
-            {/* Contract Scanner Tool */}
-            {activeToolTab === "contract" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#FF0000] p-3">
-                    <Bug className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Malicious Contract Scanner
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      AI-powered analysis to detect malicious patterns in smart contracts
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-                      Contract Address (Ethereum)
-                    </label>
-                    <input
-                      value={contractAddress}
-                      onChange={(e) => setContractAddress(e.target.value)}
-                      placeholder="0x..."
-                      className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-                      Network
-                    </label>
-                    <div className="flex gap-2">
-                      {(["ethereum", "sepolia"] as const).map((chain) => (
-                        <button
-                          key={chain}
-                          onClick={() => setContractChain(chain)}
-                          className={`neo-pill border-3 border-black px-4 py-2 text-sm font-black uppercase ${
-                            contractChain === chain
-                              ? "bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]"
-                              : "bg-white text-black/50"
-                          }`}
-                        >
-                          {chain === "ethereum" ? "Mainnet" : "Sepolia"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Example Contracts */}
-                  <div>
-                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-                      Try Example Contracts
-                    </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {[
-                        { 
-                          address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                          name: "USDC",
-                          risk: "SAFE",
-                          color: "bg-[#00FF00]"
-                        },
-                        { 
-                          address: "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
-                          name: "The DAO",
-                          risk: "CRITICAL",
-                          color: "bg-[#FF0000] text-white"
-                        },
-                        { 
-                          address: "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
-                          name: "PEPE",
-                          risk: "HIGH",
-                          color: "bg-[#FFFF00]"
-                        },
-                        { 
-                          address: "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
-                          name: "HEX",
-                          risk: "CRITICAL",
-                          color: "bg-[#FF0000] text-white"
-                        },
-                        { 
-                          address: "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
-                          name: "SHIB",
-                          risk: "HIGH",
-                          color: "bg-[#FFFF00]"
-                        },
-                        { 
-                          address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-                          name: "USDT",
-                          risk: "SAFE",
-                          color: "bg-[#00FF00]"
-                        },
-                      ].map((example) => (
-                        <button
-                          key={example.address}
-                          onClick={() => {
-                            setContractAddress(example.address);
-                            setContractChain("ethereum");
-                          }}
-                          className="flex items-center justify-between gap-2 border-3 border-black bg-white px-3 py-2 text-left shadow-[3px_3px_0_0_#000] transition-all hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_0_#000]"
-                        >
-                          <div>
-                            <p className="text-sm font-black">{example.name}</p>
-                            <p className="font-mono text-xs text-black/50">
-                              {example.address.slice(0, 8)}...{example.address.slice(-6)}
-                            </p>
-                          </div>
-                          <span className={`neo-pill border-2 border-black px-2 py-0.5 text-xs font-black ${example.color}`}>
-                            {example.risk}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={() => void runContractScan()}
-                    disabled={contractLoading || !contractAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#FF0000] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
-                  >
-                    {contractLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Scan Contract"
-                    )}
-                  </Button>
-                </div>
-
-                {contractError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {contractError}
-                  </p>
-                )}
-
-                {contractResult && (
-                  <div className="space-y-4">
-                    {/* Main Result Card */}
-                    <div className={`neo-card border-4 border-black p-5 ${
-                      contractResult.is_malicious ? "bg-[#FFE5E5]" : "bg-[#E8F5E9]"
-                    }`}>
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                            {"//"} Verdict
-                          </p>
-                          <p className="mt-2 text-2xl font-black uppercase">
-                            {contractResult.is_malicious ? "MALICIOUS" : "SAFE"}
-                          </p>
-                          <p className="mt-1 font-mono text-xs break-all">
-                            {contractResult.contract_address}
-                          </p>
-                          {contractResult.contract_name && (
-                            <p className="mt-1 text-sm font-bold">
-                              {contractResult.contract_name}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <Badge className={`neo-pill border-3 border-black font-black uppercase ${
-                            contractResult.risk_score >= 70
-                              ? "bg-[#FF0000] text-white"
-                              : contractResult.risk_score >= 40
-                                ? "bg-[#FFFF00] text-black"
-                                : "bg-[#00FF00] text-black"
-                          }`}>
-                            Risk: {contractResult.risk_score}/100
-                          </Badge>
-                          <p className="mt-2 text-xs font-black uppercase">
-                            {contractResult.chain}
-                          </p>
-                          {contractResult.verified && (
-                            <Badge className="neo-pill mt-1 border-2 border-black bg-[#00BFFF] text-xs font-black text-black">
-                              Verified
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Detected Issues */}
-                    {contractResult.detected_issues.length > 0 && (
-                      <div className="neo-card border-4 border-black bg-[#FFF8E1] p-5">
-                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                          {"//"} Detected Issues ({contractResult.detected_issues.length})
-                        </p>
-                        <div className="mt-4 space-y-3">
-                          {contractResult.detected_issues.map((issue, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-start gap-3 border-4 border-black bg-white p-3 shadow-[3px_3px_0_0_#000]"
-                            >
-                              <AlertTriangle className={`h-5 w-5 shrink-0 ${
-                                issue.severity === "critical" || issue.severity === "high"
-                                  ? "text-[#FF0000]"
-                                  : issue.severity === "medium"
-                                    ? "text-[#FFAA00]"
-                                    : "text-[#00BFFF]"
-                              }`} />
-                              <div>
-                                <p className="text-sm font-black uppercase">
-                                  {issue.type.replace(/_/g, " ")}
-                                </p>
-                                <p className="mt-1 text-xs text-black/70">
-                                  {issue.description}
-                                </p>
-                                <Badge className={`neo-pill mt-2 border-2 border-black text-xs font-black uppercase ${
-                                  issue.severity === "critical" ? "bg-[#FF0000] text-white" :
-                                  issue.severity === "high" ? "bg-[#FFAA00] text-black" :
-                                  issue.severity === "medium" ? "bg-[#FFFF00] text-black" :
-                                  "bg-[#00BFFF] text-black"
-                                }`}>
-                                  {issue.severity}
-                                </Badge>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Summary */}
-                    {contractResult.summary && (
-                      <div className="neo-card border-4 border-black bg-white p-5">
-                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                          {"//"} AI Analysis Summary
-                        </p>
-                        <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap">
-                          {contractResult.summary}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Generate Report Tool */}
             {activeToolTab === "report" && (
               <div className="space-y-6">
@@ -2600,6 +2677,32 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                         </p>
                       </div>
                       <div className="flex gap-2">
+                        {/* Voice Alert Button */}
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const severityMap: Record<string, "info" | "warning" | "critical" | "emergency"> = {
+                              low: "info",
+                              medium: "warning",
+                              high: "critical",
+                              critical: "emergency",
+                            };
+                            voice.speakAlert(
+                              `${alert.title}. ${alert.description}. Recommended action: ${alert.action}`,
+                              severityMap[alert.severity] ?? "warning",
+                              alert.walletAddress
+                            );
+                          }}
+                          disabled={!voice.config.enabled || voice.isSpeaking}
+                          className={`neo-button border-4 border-black px-4 font-black tracking-wider uppercase shadow-[4px_4px_0_0_#000] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000] ${
+                            voice.config.enabled 
+                              ? "bg-[#00FF00] text-black" 
+                              : "bg-gray-300 text-black/50"
+                          }`}
+                          title={voice.config.enabled ? "Listen to this alert" : "Enable voice to listen"}
+                        >
+                          <Volume2 className="h-4 w-4" strokeWidth={3} />
+                        </Button>
                         {alert.explorerUrl && (
                           <Button
                             size="sm"

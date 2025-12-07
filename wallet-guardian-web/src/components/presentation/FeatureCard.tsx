@@ -224,3 +224,173 @@ export function StepCard({ number, title, description, isLast = false, index = 0
     </div>
   )
 }
+
+// Bonus criteria card with checkmark
+interface BonusCriteriaCardProps {
+  title: string
+  status: "implemented" | "partial" | "planned"
+  evidence: string
+  description?: string
+  index?: number
+}
+
+export function BonusCriteriaCard({ 
+  title, 
+  status, 
+  evidence, 
+  description,
+  index = 0 
+}: BonusCriteriaCardProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-50px" })
+
+  const statusConfig = {
+    implemented: { 
+      bg: "bg-[var(--severity-low)]", 
+      text: "text-black",
+      icon: "✓",
+      label: "IMPLEMENTED"
+    },
+    partial: { 
+      bg: "bg-[var(--chart-5)]", 
+      text: "text-black",
+      icon: "◐",
+      label: "PARTIAL"
+    },
+    planned: { 
+      bg: "bg-secondary-background", 
+      text: "text-foreground",
+      icon: "○",
+      label: "PLANNED"
+    },
+  }
+
+  const config = statusConfig[status]
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 50, rotate: -3 }}
+      animate={isInView ? { opacity: 1, y: 0, rotate: 0 } : {}}
+      transition={{
+        type: "spring",
+        stiffness: 400,
+        damping: 25,
+        delay: index * 0.15,
+      }}
+      className="neo-card overflow-hidden"
+    >
+      {/* Status bar */}
+      <div className={cn("px-4 py-2 flex items-center justify-between", config.bg)}>
+        <span className={cn("font-heading text-sm uppercase", config.text)}>
+          {config.icon} {config.label}
+        </span>
+      </div>
+
+      <div className="p-4">
+        <h4 className="font-heading text-lg uppercase tracking-wider mb-2">
+          {title}
+        </h4>
+        {description && (
+          <p className="text-sm opacity-70 mb-3">{description}</p>
+        )}
+        <div className="font-mono text-xs bg-secondary-background px-2 py-1 border-2 border-border inline-block">
+          {evidence}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// Pattern/Category grid card
+interface PatternCardProps {
+  icon: string
+  title: string
+  examples: string[]
+  severity: "critical" | "high" | "medium"
+  index?: number
+}
+
+export function PatternCard({ icon, title, examples, severity, index = 0 }: PatternCardProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-50px" })
+
+  const severityColors = {
+    critical: "bg-[var(--severity-critical)]",
+    high: "bg-[var(--severity-high)]",
+    medium: "bg-[var(--severity-medium)]",
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={isInView ? { opacity: 1, scale: 1 } : {}}
+      transition={{
+        type: "spring",
+        stiffness: 400,
+        damping: 25,
+        delay: index * 0.1,
+      }}
+      whileHover={{ y: -4 }}
+      className="neo-card overflow-hidden h-full"
+    >
+      <div className={cn("h-1", severityColors[severity])} />
+      <div className="p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-2xl">{icon}</span>
+          <h4 className="font-heading text-sm uppercase tracking-wider">
+            {title}
+          </h4>
+        </div>
+        <ul className="space-y-1">
+          {examples.map((example, i) => (
+            <li key={i} className="text-xs opacity-70 flex items-start gap-2">
+              <span className="text-[var(--main)]">+</span>
+              {example}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </motion.div>
+  )
+}
+
+// Live API result card
+interface ApiResultCardProps {
+  title: string
+  endpoint: string
+  result: Record<string, unknown> | null
+  loading?: boolean
+  error?: string
+}
+
+export function ApiResultCard({ title, endpoint, result, loading, error }: ApiResultCardProps) {
+  return (
+    <div className="neo-card overflow-hidden">
+      <div className="bg-black px-4 py-2 flex items-center justify-between">
+        <span className="font-mono text-xs text-[var(--main)]">
+          GET {endpoint}
+        </span>
+        {loading && (
+          <motion.span
+            animate={{ opacity: [1, 0.5, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+            className="text-xs text-white"
+          >
+            Loading...
+          </motion.span>
+        )}
+      </div>
+      <div className="p-4 bg-black text-white font-mono text-xs overflow-auto max-h-64">
+        {error ? (
+          <span className="text-[var(--severity-critical)]">{error}</span>
+        ) : result ? (
+          <pre>{JSON.stringify(result, null, 2)}</pre>
+        ) : (
+          <span className="opacity-50">Click to fetch...</span>
+        )}
+      </div>
+    </div>
+  )
+}

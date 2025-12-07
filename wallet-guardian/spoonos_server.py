@@ -13,13 +13,17 @@ Usage:
 """
 
 import os
-from typing import Optional
+import asyncio
+from typing import Optional, AsyncGenerator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+
+import logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv(override=True)
@@ -154,6 +158,63 @@ async def analyze_wallet_free(prompt: str, use_mock: bool = False):
             "prompt": prompt,
             "response": result,
         }
+    finally:
+        if "WALLET_GUARDIAN_USE_MOCK" in os.environ:
+            del os.environ["WALLET_GUARDIAN_USE_MOCK"]
+
+
+async def stream_agent_response(prompt: str) -> AsyncGenerator[str, None]:
+    """
+    Stream the agent response token by token.
+    Yields Server-Sent Events (SSE) formatted data.
+    """
+    try:
+        agent = await wallet_guardian_agent_factory(AGENT_NAME)
+        
+        # Start the agent task in the background
+        run_task = asyncio.create_task(agent.run(prompt))
+        
+        # Stream tokens as they arrive
+        async for token in agent.stream(timeout=120.0):
+            if token:
+                # SSE format: data: <content>\n\n
+                yield f"data: {token}\n\n"
+        
+        # Wait for the run task to complete
+        await run_task
+        
+        # Reset agent state
+        agent.current_step = 0
+        if hasattr(agent, 'memory') and hasattr(agent.memory, 'clear'):
+            agent.memory.clear()
+        
+        # Send done event
+        yield "data: [DONE]\n\n"
+        
+    except Exception as e:
+        logger.error(f"Streaming error: {e}")
+        yield f"data: [ERROR] {str(e)}\n\n"
+
+
+@app.post("/analyze/stream")
+async def analyze_wallet_stream(prompt: str, use_mock: bool = False):
+    """
+    Streaming endpoint for wallet analysis.
+    Returns Server-Sent Events (SSE) stream of tokens.
+    """
+    if use_mock:
+        os.environ["WALLET_GUARDIAN_USE_MOCK"] = "true"
+    
+    try:
+        return StreamingResponse(
+            stream_agent_response(prompt),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            }
+        )
     finally:
         if "WALLET_GUARDIAN_USE_MOCK" in os.environ:
             del os.environ["WALLET_GUARDIAN_USE_MOCK"]
