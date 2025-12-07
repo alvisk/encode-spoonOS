@@ -53,11 +53,6 @@ class ApprovalScanTool(BaseTool):
         "required": ["address"],
     }
 
-    def __init__(self):
-        super().__init__()
-        self.neo_client = NeoClient()
-        self.inspector = SusInspector()
-
     async def execute(self, address: str, lookback_days: int = 90) -> Dict[str, Any]:
         """Execute the approval scan."""
         return self.call(address, lookback_days)
@@ -69,11 +64,14 @@ class ApprovalScanTool(BaseTool):
         Returns:
             Dict with contract interactions, flags, and risk assessment
         """
+        neo_client = NeoClient()
+        inspector = SusInspector()
+        
         end_time = int(time.time())
         start_time = end_time - (lookback_days * 24 * 60 * 60)
         
         try:
-            transfers = self.neo_client.get_nep17_transfers(address, start_time, end_time)
+            transfers = neo_client.get_nep17_transfers(address, start_time, end_time)
         except Exception as e:
             return {
                 "address": address,
@@ -96,11 +94,11 @@ class ApprovalScanTool(BaseTool):
             # Get or create interaction record
             if contract_hash not in contract_interactions:
                 # Analyze the contract
-                is_trusted = contract_hash in self.inspector.TRUSTED_CONTRACTS
-                contract_name = self.inspector.TRUSTED_CONTRACTS.get(contract_hash)
+                is_trusted = contract_hash in inspector.TRUSTED_CONTRACTS
+                contract_name = inspector.TRUSTED_CONTRACTS.get(contract_hash)
                 
                 # Get contract analysis for risk level
-                analysis = self.inspector.analyze_contract(contract_hash)
+                analysis = inspector.analyze_contract(contract_hash)
                 
                 contract_interactions[contract_hash] = ContractInteraction(
                     contract_hash=contract_hash,

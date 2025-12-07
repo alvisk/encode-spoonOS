@@ -107,18 +107,16 @@
   .neo-card-interactive {
     @apply border-border bg-secondary-background text-foreground border-4;
     border-radius: 0;
-    box-shadow: var(--shadow);
-    transition: none;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.1s ease-out;
   }
 
   .neo-card-interactive:hover {
-    transform: translate(4px, 4px);
-    box-shadow: 4px 4px 0px 0px var(--border);
+    box-shadow: 3px 3px 0px 0px var(--border);
   }
 
   .neo-card-interactive:active {
-    transform: translate(8px, 8px);
-    box-shadow: none;
+    box-shadow: 1px 1px 0px 0px var(--border);
   }
 
   /* BRUTALIST PILL - heavier borders, bigger shadow */
@@ -205,30 +203,28 @@
   /* BRUTALIST INPUT */
   .neo-input {
     @apply w-full border-4 border-black px-4 py-3 font-mono text-sm bg-white;
-    box-shadow: 6px 6px 0px 0px #000;
+    box-shadow: 4px 4px 0px 0px #000;
+    transition: box-shadow 0.1s ease-out;
   }
 
   .neo-input:focus {
     outline: none;
-    box-shadow: 4px 4px 0px 0px #000;
-    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px 0px #000;
   }
 
   /* BRUTALIST BUTTON */
   .neo-button {
     @apply border-4 border-black bg-white text-black font-bold uppercase tracking-wider px-6 py-3;
-    box-shadow: 8px 8px 0px 0px #000;
-    transition: none;
+    box-shadow: 4px 4px 0px 0px #000;
+    transition: box-shadow 0.1s ease-out;
   }
 
   .neo-button:hover {
-    transform: translate(4px, 4px);
-    box-shadow: 4px 4px 0px 0px #000;
+    box-shadow: 3px 3px 0px 0px #000;
   }
 
   .neo-button:active {
-    transform: translate(8px, 8px);
-    box-shadow: none;
+    box-shadow: 1px 1px 0px 0px #000;
   }
 
   /* CRITICAL ALERT - with danger stripe header */
