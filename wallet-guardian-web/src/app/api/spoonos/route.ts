@@ -1,10 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 const SPOONOS_API_URL = "https://encode-spoonos-production.up.railway.app";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const parsedBody: unknown = await request.json().catch(() => null);
+    const body =
+      parsedBody && typeof parsedBody === "object" ? parsedBody : {};
     const paymentHeader = request.headers.get("X-PAYMENT") ?? "";
 
     const headers: Record<string, string> = {
@@ -24,9 +27,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const data = await response.json();
+    const data: unknown = await response.json().catch(() => null);
 
-    return NextResponse.json(data, { status: response.status });
+    return NextResponse.json(data ?? { error: "Invalid response" }, { status: response.status });
   } catch (error) {
     console.error("[spoonos proxy] Error:", error);
     return NextResponse.json(

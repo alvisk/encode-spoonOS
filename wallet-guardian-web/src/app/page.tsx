@@ -257,7 +257,7 @@ const DEFAULT_WALLET: Wallet = {
 
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
-  
+
   // Aggregate activities from all wallets and sort by timestamp
   const allActivities = Object.values(mockActivityByAddress)
     .flat()
@@ -266,7 +266,7 @@ export default function HomePage() {
 
   // Scanner mode toggle
   const [scannerMode, setScannerMode] = useState<"wallet" | "contract">("wallet");
-  
+
   const [scanAddress, setScanAddress] = useState("");
   const [scanStatus, setScanStatus] = useState<
     "idle" | "loading" | "error" | "done" | "payment_required"
@@ -571,7 +571,7 @@ export default function HomePage() {
           const prompt = encodeURIComponent(
             `analyze wallet ${scanAddress.trim()}`,
           );
-          
+
           setIsStreaming(true);
           streamingRef.current = true;
           setStreamedText("");
@@ -658,7 +658,7 @@ export default function HomePage() {
       ]);
 
       // Only set done if we haven't already set payment_required or error
-      setScanStatus((current) => 
+      setScanStatus((current) =>
         current === "loading" ? "done" : current
       );
     } catch (err) {
@@ -847,14 +847,14 @@ export default function HomePage() {
       const res = await fetch(
         `${SPOONOS_API_URL}/api/v2/contract-scan/${encodeURIComponent(contractAddress.trim())}?chain=${contractChain}`,
       );
-      
+
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { detail?: string };
         throw new Error(err.detail ?? "Contract scan failed");
       }
-      
+
       const apiData = (await res.json()) as MaliciousContractApiResponse;
-      
+
       // Normalize the API response - extract from verdict if nested
       const normalized: MaliciousContractResult = {
         contract_address: apiData.contract_address,
@@ -871,7 +871,7 @@ export default function HomePage() {
           description: issue.description ?? issue.explanation ?? "No description available",
         })),
       };
-      
+
       setContractResult(normalized);
     } catch (err) {
       // Fallback to SpoonOS natural language if direct endpoint fails
@@ -880,12 +880,12 @@ export default function HomePage() {
           `scan contract ${contractAddress.trim()} on ${contractChain} for malicious patterns`,
         );
         // Parse the result
-        const isMalicious = result.toLowerCase().includes("malicious") || 
+        const isMalicious = result.toLowerCase().includes("malicious") ||
                            result.toLowerCase().includes("suspicious") ||
                            result.toLowerCase().includes("high risk");
         const riskMatch = /risk[_\s]?score[:\s]+(\d+)/i.exec(result);
         const riskLevelMatch = /risk[_\s]?level[:\s]+(\w+)/i.exec(result);
-        
+
         setContractResult({
           contract_address: contractAddress.trim(),
           chain: contractChain,
@@ -919,11 +919,11 @@ export default function HomePage() {
       const targetAddress = validityResult?.address ?? toolAddress.trim();
       const riskLevel = validityResult?.risk_level ?? "unknown";
       const riskFlags = validityResult?.risk_flags ?? [];
-      
+
       const result = await invokeSpoonTool(
         `draft action message for wallet ${targetAddress} with risk level ${riskLevel} and flags ${riskFlags.join(", ")} for ${reportChannel} channel`,
       );
-      
+
       const message = result ?? "Unable to generate report. Please try again.";
       setReportResult({
         channel: reportChannel,
@@ -1006,7 +1006,7 @@ export default function HomePage() {
               >
                 <a href="#ui">Command Center</a>
               </Button>
-              
+
 
             </div>
           </div>
@@ -1099,14 +1099,14 @@ export default function HomePage() {
                   <span>Contract Scanner</span>
                 </button>
               </div>
-              
+
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl font-black tracking-wide uppercase">
                     {scannerMode === "wallet" ? "Wallet Scanner" : "Contract Scanner"}
                   </CardTitle>
                   <CardDescription className="mt-1 font-medium text-black/70">
-                    {scannerMode === "wallet" 
+                    {scannerMode === "wallet"
                       ? "Input a Neo N3 or Ethereum address for instant security analysis."
                       : "Scan Ethereum smart contracts for malicious patterns using AI."}
                   </CardDescription>
@@ -1150,7 +1150,7 @@ export default function HomePage() {
                     ERROR: {scanError}
                   </p>
                 ) : null}
-                
+
                 {/* Quick Examples */}
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-bold text-black/60">Examples:</span>
@@ -1245,72 +1245,6 @@ export default function HomePage() {
 
               {scanWallet && scanStatus !== "payment_required" ? (
                 <>
-                  {/* AI ANALYSIS CARD - SpoonOS Response */}
-                  {aiAnalysis ? (
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                          <Bot className="h-6 w-6 text-black" strokeWidth={3} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
-                            {"//"} SPOONOS AI ANALYSIS
-                          </p>
-                          <p className="font-mono text-xs text-white/60">
-                            Agent: assertion-os
-                          </p>
-                        </div>
-                        <Badge className={`neo-pill ml-auto border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "bg-[#FFFF00] text-black animate-pulse" : "bg-[#00FF00] text-black"}`}>
-                          {isStreaming ? "Streaming..." : "Complete"}
-                        </Badge>
-                      </div>
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        <div className="text-sm leading-relaxed font-medium whitespace-pre-wrap text-white/90">
-                          {streamedText || aiAnalysis.result}
-                          {isStreaming && (
-                            <span className="inline-block w-2 h-4 ml-0.5 bg-[#00FF00] animate-pulse" />
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-4 border-t border-white/20 pt-4">
-                        <p className="font-mono text-xs text-white/50">
-                          Powered by SpoonOS x402 Gateway • Neo N3 Blockchain
-                          {aiAnalysis.payer && (
-                            <span className="mt-1 block">
-                              Paid by: {aiAnalysis.payer.slice(0, 6)}...
-                              {aiAnalysis.payer.slice(-4)}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* AI Loading State - Show while AI analysis is loading */
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
-                      <div className="flex items-center gap-3">
-                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                          <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
-                            {"//"} ANALYZING WALLET
-                          </p>
-                          <p className="font-mono text-xs text-white/60">
-                            SpoonOS Agent Processing...
-                          </p>
-                        </div>
-                        <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
-                          Analyzing
-                        </Badge>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        <div className="h-3 bg-white/10 rounded animate-pulse" />
-                        <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
-                        <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
-                      </div>
-                    </div>
-                  )}
-
                   <div className="grid gap-6 lg:grid-cols-2">
                     {/* WALLET INFO CARD */}
                     <div className="neo-card border-4 border-black bg-white p-5">
@@ -1392,6 +1326,72 @@ export default function HomePage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* AI ANALYSIS CARD - SpoonOS Response */}
+                  {aiAnalysis ? (
+                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                      <div className="mb-4 flex items-center gap-3">
+                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                          <Bot className="h-6 w-6 text-black" strokeWidth={3} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                            {"//"} SPOONOS AI ANALYSIS
+                          </p>
+                          <p className="font-mono text-xs text-white/60">
+                            Agent: assertion-os
+                          </p>
+                        </div>
+                        <Badge className={`neo-pill ml-auto border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "bg-[#FFFF00] text-black animate-pulse" : "bg-[#00FF00] text-black"}`}>
+                          {isStreaming ? "Streaming..." : "Complete"}
+                        </Badge>
+                      </div>
+                      <div className="prose prose-invert prose-sm max-w-none">
+                        <div className="text-sm leading-relaxed font-medium whitespace-pre-wrap text-white/90">
+                          {streamedText || aiAnalysis.result}
+                          {isStreaming && (
+                            <span className="inline-block w-2 h-4 ml-0.5 bg-[#00FF00] animate-pulse" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-4 border-t border-white/20 pt-4">
+                        <p className="font-mono text-xs text-white/50">
+                          Powered by SpoonOS x402 Gateway • Neo N3 Blockchain
+                          {aiAnalysis.payer && (
+                            <span className="mt-1 block">
+                              Paid by: {aiAnalysis.payer.slice(0, 6)}...
+                              {aiAnalysis.payer.slice(-4)}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* AI Loading State - Show while AI analysis is loading */
+                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                          <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                            {"//"} ANALYZING WALLET
+                          </p>
+                          <p className="font-mono text-xs text-white/60">
+                            SpoonOS Agent Processing...
+                          </p>
+                        </div>
+                        <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
+                          Analyzing
+                        </Badge>
+                      </div>
+                      <div className="mt-4 space-y-2">
+                        <div className="h-3 bg-white/10 rounded animate-pulse" />
+                        <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
+                        <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
+                      </div>
+                    </div>
+                  )}
 
                   {/* ALERTS CARD */}
                   <div
@@ -1544,8 +1544,8 @@ export default function HomePage() {
                     <div className="space-y-6">
                       {/* Main Verdict Card */}
                       <div className={`neo-card border-4 border-black p-6 ${
-                        contractResult.is_malicious 
-                          ? "bg-gradient-to-br from-[#FFE5E5] to-[#FFCCCC]" 
+                        contractResult.is_malicious
+                          ? "bg-gradient-to-br from-[#FFE5E5] to-[#FFCCCC]"
                           : "bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9]"
                       }`}>
                         <div className="flex items-start justify-between gap-4">
@@ -1835,7 +1835,7 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   </TableHeader>
                   <TableBody>
                     {mockWallets.map((wallet, i) => {
-                      const explorerUrl = wallet.chains[0] === "Ethereum" 
+                      const explorerUrl = wallet.chains[0] === "Ethereum"
                         ? `https://etherscan.io/address/${wallet.address}`
                         : wallet.chains[0] === "Neo N3"
                           ? `https://neotube.io/address/${wallet.address}`
