@@ -62,52 +62,6 @@ function FlowBox({ title, subtitle, icon, color = "default", delay = 0 }: FlowBo
   )
 }
 
-interface CurvedConnectorProps {
-  delay?: number
-  width?: number
-  height?: number
-}
-
-function CurvedConnector({ delay = 0, width = 100, height = 60 }: CurvedConnectorProps) {
-  const ref = useRef<HTMLDivElement>(null)
-  const isInView = useInView(ref, { once: true, margin: "-30px" })
-  const arrowSize = 8
-  const curveOffset = width * 0.4
-
-  return (
-    <div ref={ref} className="flex items-center justify-center">
-      <motion.svg
-        initial={{ opacity: 0 }}
-        animate={isInView ? { opacity: 1 } : {}}
-        transition={{ duration: 0.3, delay }}
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        fill="none"
-      >
-        {/* Curved path - starts top center, curves right, ends bottom center */}
-        <motion.path
-          d={`M ${width / 2} 0 C ${width / 2 + curveOffset} ${height * 0.3}, ${width / 2 + curveOffset} ${height * 0.7}, ${width / 2} ${height - arrowSize}`}
-          stroke="currentColor"
-          strokeWidth={3}
-          fill="none"
-          initial={{ pathLength: 0 }}
-          animate={isInView ? { pathLength: 1 } : {}}
-          transition={{ duration: 0.4, delay }}
-        />
-        {/* Arrow head */}
-        <motion.polygon
-          points={`${width / 2 - 6},${height - arrowSize} ${width / 2},${height} ${width / 2 + 6},${height - arrowSize}`}
-          fill="currentColor"
-          initial={{ opacity: 0, scale: 0 }}
-          animate={isInView ? { opacity: 1, scale: 1 } : {}}
-          transition={{ delay: delay + 0.3, duration: 0.15 }}
-        />
-      </motion.svg>
-    </div>
-  )
-}
-
 interface ConnectorProps {
   direction?: "horizontal" | "vertical" | "down-right" | "down-left"
   delay?: number
