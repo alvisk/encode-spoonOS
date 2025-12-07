@@ -167,32 +167,48 @@ async def stream_agent_response(prompt: str) -> AsyncGenerator[str, None]:
     """
     Stream the agent response token by token.
     Yields Server-Sent Events (SSE) formatted data.
+    
+    Note: Since the underlying SDK doesn't support true token streaming,
+    we run the agent to completion and then stream the result word by word
+    for a better user experience.
     """
     try:
         agent = await wallet_guardian_agent_factory(AGENT_NAME)
         
-        # Start the agent task in the background
-        run_task = asyncio.create_task(agent.run(prompt))
+        # Send initial status
+        yield "data: Analyzing wallet...\n\n"
+        await asyncio.sleep(0.1)
         
-        # Stream tokens as they arrive
-        async for token in agent.stream(timeout=120.0):
-            if token:
-                # SSE format: data: <content>\n\n
-                yield f"data: {token}\n\n"
-        
-        # Wait for the run task to complete
-        await run_task
+        # Run the agent to completion
+        result = await agent.run(prompt)
         
         # Reset agent state
         agent.current_step = 0
         if hasattr(agent, 'memory') and hasattr(agent.memory, 'clear'):
             agent.memory.clear()
         
+        # Clear the initial message and stream the actual result
+        yield "data: [CLEAR]\n\n"
+        await asyncio.sleep(0.05)
+        
+        # Stream the result word by word for a typing effect
+        if result:
+            words = result.split(' ')
+            for i, word in enumerate(words):
+                # Add space before word (except first)
+                if i > 0:
+                    yield f"data:  \n\n"
+                yield f"data: {word}\n\n"
+                # Small delay between words for typing effect
+                await asyncio.sleep(0.02)
+        
         # Send done event
         yield "data: [DONE]\n\n"
         
     except Exception as e:
         logger.error(f"Streaming error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         yield f"data: [ERROR] {str(e)}\n\n"
 
 

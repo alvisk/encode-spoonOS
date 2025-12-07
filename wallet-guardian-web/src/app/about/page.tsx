@@ -8,12 +8,10 @@ import {
   StaggerItem,
   GlitchText,
   FeatureCard,
-  SimpleFlow,
   MultiChainArchitectureDiagram,
   OracleFlowDiagram,
   CodeShowcase,
   TerminalOutput,
-  BonusCriteriaCard,
   PatternCard,
 } from "~/components/presentation"
 
@@ -280,11 +278,225 @@ export default function AboutPage() {
         />
       </section>
 
-      {/* ========== KEY DIFFERENTIATOR 1: NEO ORACLE ========== */}
+      {/* ========== CUSTOMER SEGMENTATION ========== */}
       <section className="min-h-screen flex items-center py-20 px-4 md:px-8 bg-secondary-background">
         <div className="max-w-6xl mx-auto w-full">
           <AnimatedSection variant="slam" className="mb-12 text-center">
-            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--main)] text-black">KEY DIFFERENTIATOR #1</span>
+            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--main)] text-black">WHO IT&apos;S FOR</span>
+            <h2 className="font-heading text-4xl md:text-6xl uppercase tracking-tight">
+              BUILT FOR <span className="text-[var(--main)]">EVERYONE</span>
+            </h2>
+            <p className="text-lg opacity-60 mt-4 max-w-2xl mx-auto">
+              Whether you&apos;re a developer building secure dApps or an individual protecting your assets
+            </p>
+          </AnimatedSection>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* dApps / Developers */}
+            <AnimatedSection variant="slideLeft">
+              <div className="neo-card overflow-hidden h-full">
+                <div className="bg-[var(--chart-4)] px-4 py-3 border-b-4 border-border">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏗️</span>
+                    <h3 className="font-heading text-white uppercase text-xl">FOR dApps & DEVELOPERS</h3>
+                  </div>
+                </div>
+                <div className="p-6 space-y-6">
+                  <p className="text-sm opacity-80">
+                    Integrate trustless security checks directly into your smart contracts and dApps via our Neo Oracle or REST APIs.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--main)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">01</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">DEX / Trading Platforms</strong>
+                        <p className="text-xs opacity-70">Block risky wallets before trades execute. Protect your users from interacting with flagged addresses.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--main)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">02</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Lending Protocols</strong>
+                        <p className="text-xs opacity-70">Assess borrower risk before lending. Integrate wallet validity scores into your risk models.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--main)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">03</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">NFT Marketplaces</strong>
+                        <p className="text-xs opacity-70">Scan contracts before listings. Detect honeypots and rug pulls to protect collectors.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--main)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">04</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Wallet Providers</strong>
+                        <p className="text-xs opacity-70">Show risk warnings before users sign transactions. Embed security into the UX.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-black border-4 border-border">
+                    <h4 className="font-heading text-[var(--main)] uppercase text-xs mb-2">INTEGRATION OPTIONS</h4>
+                    <div className="font-mono text-xs text-white space-y-1">
+                      <div>• Neo Oracle: <span className="text-[var(--chart-5)]">is_risky(address, threshold)</span></div>
+                      <div>• REST API: <span className="text-[var(--chart-5)]">/api/v2/contract-scan/&#123;addr&#125;</span></div>
+                      <div>• WebSocket: <span className="text-[var(--chart-5)]">Real-time monitoring</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+
+            {/* Individual Users */}
+            <AnimatedSection variant="slideRight">
+              <div className="neo-card overflow-hidden h-full">
+                <div className="bg-[var(--severity-low)] px-4 py-3 border-b-4 border-border">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">👤</span>
+                    <h3 className="font-heading text-black uppercase text-xl">FOR INDIVIDUALS</h3>
+                  </div>
+                </div>
+                <div className="p-6 space-y-6">
+                  <p className="text-sm opacity-80">
+                    Take control of your wallet security with AI-powered insights, real-time monitoring, and actionable alerts.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--severity-low)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">01</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Portfolio Monitoring</strong>
+                        <p className="text-xs opacity-70">Track multiple wallets across Neo and Ethereum. Get instant alerts on suspicious activity.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--severity-low)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">02</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Contract Scanning</strong>
+                        <p className="text-xs opacity-70">Before you interact with any contract, scan it for honeypots, rug pulls, and vulnerabilities.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--severity-low)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">03</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Approval Management</strong>
+                        <p className="text-xs opacity-70">Review and manage token approvals. Revoke risky permissions before it&apos;s too late.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 bg-[var(--severity-low)] border-2 border-border flex items-center justify-center flex-shrink-0">
+                        <span className="font-heading text-black text-xs">04</span>
+                      </div>
+                      <div>
+                        <strong className="text-sm">Counterparty Analysis</strong>
+                        <p className="text-xs opacity-70">Know who you&apos;re transacting with. Get risk assessments on any wallet address.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[var(--severity-low)] border-4 border-border">
+                    <h4 className="font-heading text-black uppercase text-xs mb-2">ACCESS OPTIONS</h4>
+                    <div className="font-mono text-xs text-black space-y-1">
+                      <div>• Web Dashboard: <span className="font-bold">Visual portfolio view</span></div>
+                      <div>• Voice Alerts: <span className="font-bold">Audio notifications</span></div>
+                      <div>• CLI Tool: <span className="font-bold">Terminal-based scanning</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
+
+          {/* Comparison Table */}
+          <AnimatedSection variant="slideUp" className="mt-12">
+            <div className="neo-card overflow-hidden">
+              <div className="bg-[var(--main)] px-4 py-3 border-b-4 border-border">
+                <h3 className="font-heading text-black uppercase text-center">FEATURE COMPARISON</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-4 border-border">
+                      <th className="p-4 text-left font-heading uppercase">Feature</th>
+                      <th className="p-4 text-center font-heading uppercase">
+                        <span className="neo-pill text-xs bg-[var(--chart-4)] text-white">dApps</span>
+                      </th>
+                      <th className="p-4 text-center font-heading uppercase">
+                        <span className="neo-pill text-xs bg-[var(--severity-low)] text-black">Individuals</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono">
+                    <tr className="border-b border-border">
+                      <td className="p-4">On-chain risk verification</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                      <td className="p-4 text-center opacity-40">—</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-4">Smart contract integration</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                      <td className="p-4 text-center opacity-40">—</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-4">REST API access</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-4">Malicious contract scanner</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-4">Portfolio dashboard</td>
+                      <td className="p-4 text-center opacity-40">—</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="p-4">Voice alerts</td>
+                      <td className="p-4 text-center opacity-40">—</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                    </tr>
+                    <tr>
+                      <td className="p-4">x402 micropayments</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                      <td className="p-4 text-center text-xl">✓</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </AnimatedSection>
+        </div>
+      </section>
+
+      {/* ========== NEO ORACLE ========== */}
+      <section className="min-h-screen flex items-center py-20 px-4 md:px-8">
+        <div className="max-w-6xl mx-auto w-full">
+          <AnimatedSection variant="slam" className="mb-12 text-center">
+            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--main)] text-black">ON-CHAIN SECURITY</span>
             <h2 className="font-heading text-4xl md:text-6xl uppercase tracking-tight">
               NEO <span className="text-[var(--main)]">ORACLE</span> CONTRACT
             </h2>
@@ -348,13 +560,13 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ========== KEY DIFFERENTIATOR 2: MALICIOUS CONTRACT DETECTOR ========== */}
+      {/* ========== MALICIOUS CONTRACT DETECTOR ========== */}
       <section className="min-h-screen flex items-center py-20 px-4 md:px-8">
         <div className="max-w-6xl mx-auto w-full">
           <AnimatedSection variant="glitch" className="mb-12 text-center">
-            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--chart-4)] text-white">KEY DIFFERENTIATOR #2</span>
+            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--chart-4)] text-white">AI SECURITY</span>
             <h2 className="font-heading text-4xl md:text-6xl uppercase tracking-tight">
-              AI-POWERED <span className="text-[var(--chart-4)]">CONTRACT SCANNER</span>
+              MALICIOUS <span className="text-[var(--chart-4)]">CONTRACT SCANNER</span>
             </h2>
             <p className="text-lg opacity-60 mt-4 max-w-2xl mx-auto">
               Detect honeypots, rug pulls, and vulnerabilities with pattern matching + LLM deep analysis
@@ -409,29 +621,29 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ========== SPOONOS INTEGRATION ========== */}
+      {/* ========== SPOONOS POWERED ========== */}
       <section className="min-h-screen flex items-center py-20 px-4 md:px-8 bg-secondary-background">
         <div className="max-w-6xl mx-auto w-full">
           <AnimatedSection variant="slam" className="mb-12 text-center">
-            <span className="neo-pill text-xs mb-4 inline-block">BASELINE REQUIREMENTS</span>
+            <span className="neo-pill text-xs mb-4 inline-block">POWERED BY</span>
             <h2 className="font-heading text-4xl md:text-6xl uppercase tracking-tight">
-              SPOONOS <span className="text-[var(--main)]">INTEGRATION</span>
+              SPOONOS <span className="text-[var(--main)]">FRAMEWORK</span>
             </h2>
             <p className="text-lg opacity-60 mt-4 max-w-2xl mx-auto">
-              Meeting both mandatory requirements: LLM via Spoon + Tools from spoon-toolkit
+              Built on SpoonOS for AI orchestration, multi-provider LLM support, and extensible tool architecture
             </p>
           </AnimatedSection>
 
           <div className="grid lg:grid-cols-2 gap-8 mb-12">
-            {/* Requirement 1 */}
+            {/* LLM Integration */}
             <AnimatedSection variant="slideLeft">
               <div className="neo-card overflow-hidden h-full">
-                <div className="bg-[var(--severity-low)] px-4 py-2 border-b-4 border-border">
-                  <span className="font-heading text-black uppercase">REQUIREMENT 1: LLM VIA SPOON</span>
+                <div className="bg-[var(--main)] px-4 py-2 border-b-4 border-border">
+                  <span className="font-heading text-black uppercase">MULTI-PROVIDER LLM</span>
                 </div>
                 <div className="p-4">
                   <p className="text-sm opacity-70 mb-4">
-                    Multi-provider LLM support using <code>spoon_ai.chat.ChatBot</code>
+                    Seamlessly switch between OpenAI, Anthropic, or Gemini with a single config change
                   </p>
                   <div className="font-mono text-xs bg-black text-white p-3">
                     <div><span className="text-[var(--main)]">from</span> spoon_ai.chat <span className="text-[var(--main)]">import</span> ChatBot</div>
@@ -440,31 +652,25 @@ export default function AboutPage() {
                     <div className="pl-4">model_name=<span className="text-[var(--chart-5)]">&quot;gpt-4o-mini&quot;</span>,</div>
                     <div>)</div>
                   </div>
-                  <div className="mt-3 text-xs opacity-50">
-                    File: src/agent.py:101-119
-                  </div>
                 </div>
               </div>
             </AnimatedSection>
 
-            {/* Requirement 2 */}
+            {/* Tool Architecture */}
             <AnimatedSection variant="slideRight">
               <div className="neo-card overflow-hidden h-full">
-                <div className="bg-[var(--severity-low)] px-4 py-2 border-b-4 border-border">
-                  <span className="font-heading text-black uppercase">REQUIREMENT 2: TOOLS FROM SPOON-TOOLKIT</span>
+                <div className="bg-[var(--main)] px-4 py-2 border-b-4 border-border">
+                  <span className="font-heading text-black uppercase">EXTENSIBLE TOOLS</span>
                 </div>
                 <div className="p-4">
                   <p className="text-sm opacity-70 mb-4">
-                    All 8 tools inherit from <code>spoon_ai.tools.BaseTool</code>
+                    Custom tools built on SpoonOS BaseTool for wallet analysis and contract scanning
                   </p>
                   <div className="font-mono text-xs bg-black text-white p-3">
                     <div><span className="text-[var(--main)]">from</span> spoon_ai.tools <span className="text-[var(--main)]">import</span> BaseTool</div>
                     <div className="mt-2"><span className="text-[var(--main)]">class</span> <span className="text-[var(--chart-4)]">MaliciousContractDetectorTool</span>(BaseTool):</div>
                     <div className="pl-4">name = <span className="text-[var(--chart-5)]">&quot;malicious_contract_detector&quot;</span></div>
                     <div className="pl-4">...</div>
-                  </div>
-                  <div className="mt-3 text-xs opacity-50">
-                    File: src/tools/malicious_contract_detector.py
                   </div>
                 </div>
               </div>
@@ -474,7 +680,7 @@ export default function AboutPage() {
           {/* Agent flow */}
           <AnimatedSection variant="slideUp">
             <div className="neo-card p-6">
-              <h3 className="font-heading text-xl uppercase mb-4 text-center">AGENT INVOCATION FLOW</h3>
+              <h3 className="font-heading text-xl uppercase mb-4 text-center">HOW THE AGENT WORKS</h3>
               <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-sm">
                 <span className="neo-pill text-xs">User Query</span>
                 <span className="opacity-50">→</span>
@@ -547,41 +753,41 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* ========== BONUS CRITERIA ========== */}
+      {/* ========== ADVANCED FEATURES ========== */}
       <section className="py-20 px-4 md:px-8">
         <div className="max-w-6xl mx-auto w-full">
           <AnimatedSection variant="glitch" className="mb-12 text-center">
-            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--chart-5)] text-black">EXTRA POINTS</span>
+            <span className="neo-pill text-xs mb-4 inline-block bg-[var(--chart-5)] text-black">DEEP INTEGRATION</span>
             <h2 className="font-heading text-4xl md:text-6xl uppercase tracking-tight">
-              BONUS <span className="text-[var(--main)]">CRITERIA</span>
+              ADVANCED <span className="text-[var(--main)]">FEATURES</span>
             </h2>
           </AnimatedSection>
 
           <StaggerContainer className="grid md:grid-cols-3 gap-6" staggerDelay={0.15}>
             <StaggerItem>
-              <BonusCriteriaCard
-                title="X402 INTEGRATION"
-                status="implemented"
-                evidence="server.py:223-258"
-                description="Pay-per-invoke micropayments on Base Sepolia with 0.01 USDC per call"
+              <FeatureCard
+                icon="💳"
+                title="x402 PAYMENTS"
+                description="Pay-per-invoke micropayments on Base Sepolia. Monetize AI agents with 0.01 USDC per call."
+                color="yellow"
                 index={0}
               />
             </StaggerItem>
             <StaggerItem>
-              <BonusCriteriaCard
-                title="GRAPH TECHNOLOGIES"
-                status="implemented"
-                evidence="graph_orchestrator.py (1124 lines)"
-                description="DAG-based computation graph with caching eliminates redundant RPC calls"
+              <FeatureCard
+                icon="🔀"
+                title="GRAPH ORCHESTRATION"
+                description="DAG-based computation eliminates redundant RPC calls. Parallel execution with intelligent caching."
+                color="blue"
                 index={1}
               />
             </StaggerItem>
             <StaggerItem>
-              <BonusCriteriaCard
-                title="NEO TECHNOLOGIES"
-                status="implemented"
-                evidence="Oracle contract + RPC + NEP-17"
-                description="Neo N3 Oracle smart contract, JSON-RPC client, full NEP-17 support"
+              <FeatureCard
+                icon="⛓️"
+                title="NEO N3 NATIVE"
+                description="Oracle smart contract, JSON-RPC client, full NEP-17 token support. True blockchain integration."
+                color="teal"
                 index={2}
               />
             </StaggerItem>

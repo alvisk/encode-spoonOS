@@ -636,6 +636,10 @@ export default function HomePage() {
                     streamingRef.current = false;
                     setIsStreaming(false);
                     break;
+                  } else if (data === "[CLEAR]") {
+                    // Clear previous text (used when switching from status to actual response)
+                    fullText = "";
+                    setStreamedText(fullText);
                   } else if (data.startsWith("[ERROR]")) {
                     throw new Error(data.slice(8));
                   } else {
@@ -1168,6 +1172,31 @@ export default function HomePage() {
                     ERROR: {scanError}
                   </p>
                 ) : null}
+                
+                {/* Quick Examples */}
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-bold text-black/60">Examples:</span>
+                  <button
+                    onClick={() => setScanAddress("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")}
+                    className="font-mono text-[#0066CC] hover:underline hover:text-[#0044AA] transition-colors"
+                  >
+                    vitalik.eth
+                  </button>
+                  <span className="text-black/30">|</span>
+                  <button
+                    onClick={() => setScanAddress("NTTGFxiBtGX28xMTTFyjZhG3n6s5p9kvcd")}
+                    className="font-mono text-[#00AA66] hover:underline hover:text-[#008855] transition-colors"
+                  >
+                    Neo N3 Wallet
+                  </button>
+                  <span className="text-black/30">|</span>
+                  <button
+                    onClick={() => setScanAddress("0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B")}
+                    className="font-mono text-[#9933FF] hover:underline hover:text-[#7722DD] transition-colors"
+                  >
+                    Early ETH Whale
+                  </button>
+                </div>
               </div>
 
               {/* PAYWALLED ENDPOINT TOGGLE */}
@@ -1497,6 +1526,40 @@ export default function HomePage() {
                       </div>
                     </div>
 
+                    {/* Quick Examples */}
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-bold text-black/60">Examples:</span>
+                      <button
+                        onClick={() => {
+                          setContractAddress("0xbb9bc244d798123fde783fcc1c72d3bb8c189413");
+                          setContractChain("ethereum");
+                        }}
+                        className="font-mono text-[#FF0000] hover:underline hover:text-[#CC0000] transition-colors"
+                      >
+                        The DAO (Hacked)
+                      </button>
+                      <span className="text-black/30">|</span>
+                      <button
+                        onClick={() => {
+                          setContractAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+                          setContractChain("ethereum");
+                        }}
+                        className="font-mono text-[#00AA66] hover:underline hover:text-[#008855] transition-colors"
+                      >
+                        USDC (Safe)
+                      </button>
+                      <span className="text-black/30">|</span>
+                      <button
+                        onClick={() => {
+                          setContractAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7");
+                          setContractChain("ethereum");
+                        }}
+                        className="font-mono text-[#0066CC] hover:underline hover:text-[#0044AA] transition-colors"
+                      >
+                        USDT (Tether)
+                      </button>
+                    </div>
+
                     {contractError && (
                       <p className="text-sm font-black tracking-wide text-[#FF0000] uppercase">
                         ERROR: {contractError}
@@ -1597,7 +1660,7 @@ export default function HomePage() {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-black uppercase">
-                                      {issue.type.replace(/_/g, " ")}
+                                      {issue.type?.replace(/_/g, " ") ?? "Unknown Issue"}
                                     </p>
                                     <Badge className={`neo-pill border-2 border-black text-xs font-black uppercase ${
                                       issue.severity === "critical" ? "bg-[#FF0000] text-white" :
@@ -1605,11 +1668,11 @@ export default function HomePage() {
                                       issue.severity === "medium" ? "bg-[#FFFF00] text-black" :
                                       "bg-[#00BFFF] text-black"
                                     }`}>
-                                      {issue.severity}
+                                      {issue.severity ?? "unknown"}
                                     </Badge>
                                   </div>
                                   <p className="mt-1 text-sm text-black/70">
-                                    {issue.description}
+                                    {issue.description ?? "No description available"}
                                   </p>
                                 </div>
                               </div>
@@ -2414,40 +2477,40 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                 {
                   label: "TOTAL COVERAGE",
                   value: formatUSD(mockSummary.totalValueUSD),
-                  tone: "bg-[#FFFF00]",
-                  icon: <ShieldCheck className="h-6 w-6" strokeWidth={3} />,
+                  tone: "bg-slate-100",
+                  icon: <ShieldCheck className="h-5 w-5 text-slate-600" strokeWidth={2.5} />,
                 },
                 {
                   label: "TX / 24H",
                   value: mockSummary.dailyTx.toLocaleString(),
-                  tone: "bg-[#00BFFF]",
-                  icon: <Zap className="h-6 w-6" strokeWidth={3} />,
+                  tone: "bg-slate-100",
+                  icon: <Zap className="h-5 w-5 text-slate-600" strokeWidth={2.5} />,
                 },
                 {
                   label: "OPEN ALERTS",
                   value: mockSummary.openAlerts,
-                  tone: "bg-[#FF0000] text-white",
-                  icon: <BellRing className="h-6 w-6" strokeWidth={3} />,
+                  tone: "bg-red-50",
+                  icon: <BellRing className="h-5 w-5 text-red-600" strokeWidth={2.5} />,
                 },
                 {
                   label: "HIGH RISK",
                   value: mockSummary.highRiskWallets,
-                  tone: "bg-[#00FF00]",
-                  icon: <Radar className="h-6 w-6" strokeWidth={3} />,
+                  tone: "bg-amber-50",
+                  icon: <Radar className="h-5 w-5 text-amber-600" strokeWidth={2.5} />,
                 },
               ].map((stat) => (
                 <Card
                   key={stat.label}
                   className={`neo-card ${stat.tone} border-black`}
                 >
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xs font-black tracking-widest uppercase">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-[10px] font-bold tracking-wider uppercase text-slate-600 truncate">
                       {stat.label}
                     </CardTitle>
-                    {stat.icon}
+                    <div className="shrink-0">{stat.icon}</div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-black">{stat.value}</p>
+                    <p className="text-2xl font-black truncate">{stat.value}</p>
                   </CardContent>
                 </Card>
               ))}
