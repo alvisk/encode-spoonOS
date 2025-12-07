@@ -813,7 +813,7 @@ class MultiAgentOrchestrator:
     
     def _create_coordinator(self):
         """Create the coordinator agent."""
-        prompt = """You are the Wallet Guardian Coordinator. Your job is to:
+        prompt = """You are the Assertion OS Coordinator. Your job is to:
 1. Understand user queries about wallet analysis
 2. Route tasks to appropriate specialist agents
 3. Aggregate results into coherent responses
@@ -846,7 +846,7 @@ Always respond with which specialist(s) should handle the task."""
     
     def _create_data_analyst(self):
         """Create the data analyst agent."""
-        prompt = """You are the Data Analyst for Wallet Guardian. Your job is to:
+        prompt = """You are the Data Analyst for Assertion OS. Your job is to:
 1. Fetch wallet balances and transaction history
 2. Parse and normalize blockchain data
 3. Extract key metrics (balances, transfers, counterparties)
@@ -877,7 +877,7 @@ Use the provided tools to fetch data. Never fabricate data."""
     
     def _create_risk_assessor(self):
         """Create the risk assessor agent."""
-        prompt = """You are the Risk Assessor for Wallet Guardian. Your job is to:
+        prompt = """You are the Risk Assessor for Assertion OS. Your job is to:
 1. Analyze wallet metrics (concentration, stablecoin ratio, diversity)
 2. Compute risk scores (0-100)
 3. Identify risk factors and deductions
@@ -905,7 +905,7 @@ Risk levels: clean (90+), low (70-89), moderate (50-69), high (30-49), critical 
     
     def _create_pattern_detector(self):
         """Create the pattern detector agent."""
-        prompt = """You are the Pattern Detector for Wallet Guardian. Your job is to:
+        prompt = """You are the Pattern Detector for Assertion OS. Your job is to:
 1. Analyze transaction patterns for suspicious activity
 2. Detect rapid transaction bursts (potential bot activity)
 3. Identify concentrated counterparty interactions
@@ -932,7 +932,7 @@ Focus on patterns, not individual transaction values."""
     
     def _create_reporter(self):
         """Create the reporter agent."""
-        prompt = """You are the Reporter for Wallet Guardian. Your job is to:
+        prompt = """You are the Reporter for Assertion OS. Your job is to:
 1. Aggregate analysis results from all specialists
 2. Generate clear, concise summaries
 3. Provide actionable insights (not financial advice)
@@ -1078,7 +1078,7 @@ async def analyze_wallet(address: str, lookback_days: int = 30) -> Dict[str, Any
 
 async def query_guardian(query: str) -> str:
     """
-    Send a natural language query to the Wallet Guardian.
+    Send a natural language query to Assertion OS.
     
     Args:
         query: User question

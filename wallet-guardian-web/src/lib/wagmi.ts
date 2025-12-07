@@ -6,7 +6,7 @@ export const config = createConfig({
   chains: [baseSepolia],
   connectors: [
     injected(),
-    coinbaseWallet({ appName: "Wallet Guardian" }),
+    coinbaseWallet({ appName: "Assertion OS" }),
   ],
   transports: {
     [baseSepolia.id]: http(),

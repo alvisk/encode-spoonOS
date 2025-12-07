@@ -33,10 +33,10 @@ from .graph_orchestrator import MultiAgentOrchestrator, analyze_wallet as graph_
 
 
 # Agent name constant
-AGENT_NAME = "wallet-guardian"
+AGENT_NAME = "assertion-os"
 
 # System prompt for the unified agent - comprehensive and structured
-WALLET_SYSTEM_PROMPT = """You are the Neo Wallet Guardian, an AI agent for blockchain risk analysis on Neo N3.
+WALLET_SYSTEM_PROMPT = """You are Assertion OS, an AI agent for blockchain risk analysis on Neo N3.
 
 Your capabilities include:
 1. **Wallet Analysis**: Fetch and analyze wallet balances, transactions, and activity

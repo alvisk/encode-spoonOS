@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useVoiceAnnouncements } from "~/hooks/useVoiceAnnouncements";
 import { PaymentFlow } from "~/components/PaymentFlow";
+import { WalletToolsDashboard } from "~/components/WalletToolsDashboard";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -1284,7 +1285,7 @@ export default function HomePage() {
                             {"//"} SPOONOS AI ANALYSIS
                           </p>
                           <p className="font-mono text-xs text-white/60">
-                            Agent: wallet-guardian
+                            Agent: assertion-os
                           </p>
                         </div>
                         <Badge className={`neo-pill ml-auto border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "bg-[#FFFF00] text-black animate-pulse" : "bg-[#00FF00] text-black"}`}>
@@ -1796,72 +1797,73 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
           </Badge>
         </div>
 
-        {/* Shared Address Input */}
-        {activeToolTab !== "multi" && (
-          <div className="neo-card border-4 border-black bg-gray-50 p-4">
-            <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-              Target Wallet Address
-            </label>
-            <input
-              value={toolAddress}
-              onChange={(e) => setToolAddress(e.target.value)}
-              placeholder="Enter Neo N3 address..."
-              className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-            />
+        {/* Unified Tools Card */}
+        <Card className="neo-card border-black bg-white overflow-hidden">
+          {/* Shared Address Input */}
+          {activeToolTab !== "multi" && (
+            <div className="border-b-4 border-black bg-gray-50 p-4">
+              <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
+                Target Wallet Address
+              </label>
+              <input
+                value={toolAddress}
+                onChange={(e) => setToolAddress(e.target.value)}
+                placeholder="Enter Neo N3 address..."
+                className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+              />
+            </div>
+          )}
+
+          {/* Tool Tabs */}
+          <div className="flex flex-wrap border-b-4 border-black bg-gray-100">
+            {[
+              {
+                id: "validity" as const,
+                label: "Validity Score",
+                icon: <ShieldCheck className="h-4 w-4" strokeWidth={3} />,
+              },
+              {
+                id: "counterparty" as const,
+                label: "Counterparty Risk",
+                icon: <Users className="h-4 w-4" strokeWidth={3} />,
+              },
+              {
+                id: "multi" as const,
+                label: "Multi-Wallet Diff",
+                icon: <GitCompare className="h-4 w-4" strokeWidth={3} />,
+              },
+              {
+                id: "monitor" as const,
+                label: "Schedule Monitor",
+                icon: <Clock className="h-4 w-4" strokeWidth={3} />,
+              },
+              {
+                id: "approvals" as const,
+                label: "Approval Scan",
+                icon: <Shield className="h-4 w-4" strokeWidth={3} />,
+              },
+              {
+                id: "report" as const,
+                label: "Generate Report",
+                icon: <FileText className="h-4 w-4" strokeWidth={3} />,
+              },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveToolTab(tab.id)}
+                className={`flex items-center gap-2 border-r-2 border-black px-4 py-3 text-xs font-black tracking-wide uppercase transition-colors ${
+                  activeToolTab === tab.id
+                    ? "bg-[#00FF00] text-black"
+                    : "bg-transparent text-black/70 hover:bg-black/10"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
 
-        {/* Tool Tabs */}
-        <div className="flex flex-wrap gap-2">
-          {[
-            {
-              id: "validity" as const,
-              label: "Validity Score",
-              icon: <ShieldCheck className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "counterparty" as const,
-              label: "Counterparty Risk",
-              icon: <Users className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "multi" as const,
-              label: "Multi-Wallet Diff",
-              icon: <GitCompare className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "monitor" as const,
-              label: "Schedule Monitor",
-              icon: <Clock className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "approvals" as const,
-              label: "Approval Scan",
-              icon: <Shield className="h-4 w-4" strokeWidth={3} />,
-            },
-            {
-              id: "report" as const,
-              label: "Generate Report",
-              icon: <FileText className="h-4 w-4" strokeWidth={3} />,
-            },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveToolTab(tab.id)}
-              className={`flex items-center gap-2 border-4 border-black px-4 py-2 text-sm font-black tracking-wide uppercase shadow-[4px_4px_0_0_#000] ${
-                activeToolTab === tab.id
-                  ? "bg-black text-[#FFFF00]"
-                  : "bg-white text-black hover:bg-gray-100 active:bg-gray-200"
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tool Content */}
-        <Card className="neo-card border-black bg-white">
+          {/* Tool Content */}
           <CardContent className="p-6">
             {/* Validity Score Tool */}
             {activeToolTab === "validity" && (

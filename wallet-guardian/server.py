@@ -85,7 +85,7 @@ class HealthResponse(BaseModel):
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     # Startup
-    print(f"Starting Wallet Guardian x402 Gateway...")
+    print(f"Starting Assertion OS x402 Gateway...")
     print(f"Agent: {AGENT_NAME}")
     print(f"Tools: {[t.name for t in get_tools()]}")
     
@@ -99,11 +99,11 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    print("Shutting down Wallet Guardian Gateway...")
+    print("Shutting down Assertion OS Gateway...")
 
 
 app = FastAPI(
-    title="Neo Wallet Guardian",
+    title="Assertion OS",
     description="AI-powered wallet analysis agent for Neo N3 with x402 payment support",
     version="1.0.0",
     lifespan=lifespan,
@@ -227,7 +227,7 @@ async def invoke_agent(
     x_payment: Optional[str] = Header(None, alias="X-PAYMENT"),
 ):
     """
-    Invoke the wallet guardian agent.
+    Invoke the Assertion OS agent.
     
     If x402 is enabled, requires a valid X-PAYMENT header.
     """

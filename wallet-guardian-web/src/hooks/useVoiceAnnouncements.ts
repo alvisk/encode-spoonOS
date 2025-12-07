@@ -1,5 +1,6 @@
 "use client";
 
+import { Howl } from "howler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Severity = "info" | "warning" | "critical" | "emergency";
@@ -7,7 +8,6 @@ type Severity = "info" | "warning" | "critical" | "emergency";
 type VoiceConfig = {
   enabled: boolean;
   volume: number;
-  rate: number;
   announceAlerts: boolean;
   announceScanResults: boolean;
   announceContractScans: boolean;
@@ -21,29 +21,32 @@ type VoiceStatus = {
 
 type SpeakOptions = {
   severity?: Severity;
-  rate?: number;
+};
+
+type QueueItem = {
+  message: string;
+  options: SpeakOptions;
 };
 
 const DEFAULT_CONFIG: VoiceConfig = {
   enabled: true,
   volume: 1.0,
-  rate: 1.0,
   announceAlerts: true,
   announceScanResults: true,
   announceContractScans: true,
 };
 
-const STORAGE_KEY = "wallet-guardian-voice-config";
+const STORAGE_KEY = "assertion-os-voice-config";
 
 /**
- * Hook for managing voice announcements using browser's Web Speech API.
- * 
+ * Hook for managing voice announcements using Howler.js + backend TTS.
+ *
  * Features:
- * - Text-to-speech for alerts, scan results, and notifications
+ * - Text-to-speech via ElevenLabs backend API
  * - Persistent preferences stored in localStorage
  * - Queue management to prevent overlapping audio
- * - Volume and rate control
- * - Works entirely client-side, no backend required
+ * - Volume control
+ * - Falls back to Web Speech API if backend fails
  */
 export function useVoiceAnnouncements() {
   const [config, setConfig] = useState<VoiceConfig>(DEFAULT_CONFIG);
@@ -53,16 +56,15 @@ export function useVoiceAnnouncements() {
     error: null,
   });
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const queueRef = useRef<Array<{ message: string; options: SpeakOptions }>>([]);
+
+  const currentHowlRef = useRef<Howl | null>(null);
+  const queueRef = useRef<QueueItem[]>([]);
   const isProcessingRef = useRef(false);
 
   // Load config from localStorage on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -77,7 +79,7 @@ export function useVoiceAnnouncements() {
   // Save config to localStorage when it changes
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
     } catch (e) {
@@ -85,7 +87,7 @@ export function useVoiceAnnouncements() {
     }
   }, [config]);
 
-  // Check Web Speech API availability on mount
+  // Check voice API availability on mount
   useEffect(() => {
     if (typeof window === "undefined") {
       setStatus({
@@ -96,174 +98,215 @@ export function useVoiceAnnouncements() {
       return;
     }
 
-    // Check if SpeechSynthesis is available
-    if ("speechSynthesis" in window) {
-      synthRef.current = window.speechSynthesis;
-      
-      // Some browsers need voices to be loaded
-      const checkVoices = () => {
-        const voices = synthRef.current?.getVoices() ?? [];
-        if (voices.length > 0) {
+    // Check backend voice API status
+    const checkVoiceAPI = async () => {
+      try {
+        const res = await fetch("/api/voice", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (res.ok) {
+          const data = (await res.json()) as { enabled?: boolean };
           setStatus({
-            available: true,
+            available: data.enabled === true,
+            loading: false,
+            error: data.enabled ? null : "Voice API not enabled on backend",
+          });
+        } else {
+          // Fall back to checking if Howler works at all
+          setStatus({
+            available: true, // Assume available, will fail gracefully
             loading: false,
             error: null,
           });
         }
-      };
-
-      // Check immediately
-      checkVoices();
-
-      // Also listen for voiceschanged event (needed for Chrome)
-      if (synthRef.current) {
-        synthRef.current.addEventListener("voiceschanged", checkVoices);
-        
-        // Fallback: if voices don't load in 1 second, still mark as available
-        // (some browsers don't fire voiceschanged)
-        setTimeout(() => {
-          setStatus((prev) => {
-            if (prev.loading) {
-              return {
-                available: true,
-                loading: false,
-                error: null,
-              };
-            }
-            return prev;
-          });
-        }, 1000);
-
-        return () => {
-          synthRef.current?.removeEventListener("voiceschanged", checkVoices);
-        };
+      } catch {
+        // Backend check failed, but we can still try
+        setStatus({
+          available: true,
+          loading: false,
+          error: null,
+        });
       }
-    } else {
-      setStatus({
-        available: false,
-        loading: false,
-        error: "Speech synthesis not supported in this browser",
-      });
-    }
+    };
+
+    void checkVoiceAPI();
   }, []);
 
-  // Get the best available voice (prefer English voices)
-  const getBestVoice = useCallback((): SpeechSynthesisVoice | null => {
-    if (!synthRef.current) return null;
-    
-    const voices = synthRef.current.getVoices();
-    
-    // Prefer English voices, specifically ones that sound good
-    const preferredVoices = [
-      "Google US English",
-      "Google UK English Female",
-      "Google UK English Male", 
-      "Samantha",
-      "Alex",
-      "Microsoft Zira",
-      "Microsoft David",
-    ];
-    
-    for (const name of preferredVoices) {
-      const voice = voices.find((v) => v.name.includes(name));
-      if (voice) return voice;
-    }
-    
-    // Fall back to any English voice
-    const englishVoice = voices.find((v) => v.lang.startsWith("en"));
-    if (englishVoice) return englishVoice;
-    
-    // Fall back to the default voice
-    return voices[0] ?? null;
-  }, []);
+  // Fetch audio from backend and play with Howler
+  const playAudioFromBackend = useCallback(
+    async (message: string, severity: Severity): Promise<boolean> => {
+      try {
+        const res = await fetch("/api/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "alert",
+            message,
+            severity,
+          }),
+        });
+
+        if (!res.ok) {
+          console.warn("Voice API returned error:", res.status);
+          return false;
+        }
+
+        const data = (await res.json()) as {
+          success?: boolean;
+          audio_data?: string;
+          audio_format?: string;
+        };
+
+        if (!data.success || !data.audio_data) {
+          console.warn("Voice API response missing audio data");
+          return false;
+        }
+
+        // Create audio URL from base64
+        const audioUrl = `data:audio/${data.audio_format ?? "mp3"};base64,${data.audio_data}`;
+
+        return new Promise((resolve) => {
+          // Stop any current playback
+          if (currentHowlRef.current) {
+            currentHowlRef.current.stop();
+            currentHowlRef.current.unload();
+          }
+
+          const howl = new Howl({
+            src: [audioUrl],
+            format: [data.audio_format ?? "mp3"],
+            volume: config.volume,
+            html5: true, // Better for streaming/large files
+            onplay: () => {
+              setIsSpeaking(true);
+            },
+            onend: () => {
+              setIsSpeaking(false);
+              currentHowlRef.current = null;
+              resolve(true);
+            },
+            onloaderror: (_id, error) => {
+              console.error("Howler load error:", error);
+              setIsSpeaking(false);
+              currentHowlRef.current = null;
+              resolve(false);
+            },
+            onplayerror: (_id, error) => {
+              console.error("Howler play error:", error);
+              setIsSpeaking(false);
+              currentHowlRef.current = null;
+              resolve(false);
+            },
+          });
+
+          currentHowlRef.current = howl;
+          howl.play();
+        });
+      } catch (error) {
+        console.error("Failed to fetch audio from backend:", error);
+        return false;
+      }
+    },
+    [config.volume]
+  );
+
+  // Fallback to Web Speech API
+  const speakWithWebSpeech = useCallback(
+    (message: string, severity: Severity): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (!("speechSynthesis" in window)) {
+          resolve(false);
+          return;
+        }
+
+        const synth = window.speechSynthesis;
+        synth.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.volume = config.volume;
+        utterance.rate = severity === "critical" || severity === "emergency" ? 1.1 : 1.0;
+
+        // Try to get a good English voice
+        const voices = synth.getVoices();
+        const englishVoice = voices.find((v) => v.lang.startsWith("en"));
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+        }
+
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          resolve(true);
+        };
+        utterance.onerror = () => {
+          setIsSpeaking(false);
+          resolve(false);
+        };
+
+        synth.speak(utterance);
+      });
+    },
+    [config.volume]
+  );
 
   // Process the speech queue
-  const processQueue = useCallback(() => {
+  const processQueue = useCallback(async () => {
     if (isProcessingRef.current || queueRef.current.length === 0) return;
-    if (!config.enabled || !synthRef.current) {
+    if (!config.enabled) {
       queueRef.current = [];
       return;
     }
 
     isProcessingRef.current = true;
     const item = queueRef.current.shift();
-    
+
     if (!item) {
       isProcessingRef.current = false;
       return;
     }
 
     const { message, options } = item;
-    
+    const severity = options.severity ?? "info";
+
     try {
-      setIsSpeaking(true);
+      // Try backend first
+      let success = await playAudioFromBackend(message, severity);
 
-      // Cancel any ongoing speech
-      synthRef.current.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(message);
-      utteranceRef.current = utterance;
-
-      // Configure voice settings
-      utterance.volume = config.volume;
-      utterance.rate = options.rate ?? config.rate;
-      
-      // Adjust rate based on severity (urgent = faster)
-      if (options.severity === "critical" || options.severity === "emergency") {
-        utterance.rate = Math.min(utterance.rate * 1.1, 1.5);
-        utterance.pitch = 1.1; // Slightly higher pitch for urgency
+      // Fall back to Web Speech if backend fails
+      if (!success) {
+        console.log("Falling back to Web Speech API");
+        success = await speakWithWebSpeech(message, severity);
       }
 
-      // Set voice
-      const voice = getBestVoice();
-      if (voice) {
-        utterance.voice = voice;
+      if (!success) {
+        console.warn("All speech methods failed for message:", message);
       }
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        isProcessingRef.current = false;
-        utteranceRef.current = null;
-        
-        // Process next item in queue
-        if (queueRef.current.length > 0) {
-          // Small delay between messages
-          setTimeout(processQueue, 300);
-        }
-      };
-
-      utterance.onerror = (event) => {
-        console.error("Speech synthesis error:", event.error);
-        setIsSpeaking(false);
-        isProcessingRef.current = false;
-        utteranceRef.current = null;
-        
-        // Try next item in queue
-        if (queueRef.current.length > 0) {
-          setTimeout(processQueue, 300);
-        }
-      };
-
-      synthRef.current.speak(utterance);
     } catch (e) {
       console.error("Voice announcement failed:", e);
-      setIsSpeaking(false);
+    } finally {
       isProcessingRef.current = false;
+
+      // Process next item in queue after a short delay
+      if (queueRef.current.length > 0) {
+        setTimeout(() => void processQueue(), 300);
+      }
     }
-  }, [config.enabled, config.volume, config.rate, getBestVoice]);
+  }, [config.enabled, playAudioFromBackend, speakWithWebSpeech]);
 
   // Main speak function - adds to queue
   const speak = useCallback(
     (message: string, options: SpeakOptions = {}) => {
-      if (!config.enabled || !status.available) {
-        console.log("Voice not available:", { enabled: config.enabled, available: status.available });
+      if (!config.enabled) {
+        console.log("Voice disabled");
         return;
       }
-      
+
       queueRef.current.push({ message, options });
-      processQueue();
+      void processQueue();
     },
-    [config.enabled, status.available, processQueue]
+    [config.enabled, processQueue]
   );
 
   // Convenience methods for specific announcement types
@@ -286,12 +329,12 @@ export function useVoiceAnnouncements() {
   const speakContractVerdict = useCallback(
     (isMalicious: boolean, contractAddress: string, riskScore: number) => {
       if (!config.announceContractScans) return;
-      
+
       const shortAddr = `${contractAddress.slice(0, 6)}...${contractAddress.slice(-4)}`;
       const message = isMalicious
         ? `Warning! Contract ${shortAddr} has been flagged as malicious with a risk score of ${riskScore} out of 100. Exercise extreme caution.`
         : `Contract ${shortAddr} appears safe with a risk score of ${riskScore} out of 100.`;
-      
+
       speak(message, {
         severity: isMalicious ? "critical" : "info",
       });
@@ -302,17 +345,20 @@ export function useVoiceAnnouncements() {
   const speakAIAnalysis = useCallback(
     (address: string, riskLevel: string, keyFindings?: string) => {
       if (!config.announceScanResults) return;
-      
+
       const shortAddr = `${address.slice(0, 6)}...${address.slice(-4)}`;
       let message = `Analysis complete for wallet ${shortAddr}. Risk level: ${riskLevel}.`;
       if (keyFindings) {
         message += ` ${keyFindings}`;
       }
-      
-      const severity: Severity = 
-        riskLevel === "critical" || riskLevel === "high" ? "critical" :
-        riskLevel === "medium" || riskLevel === "moderate" ? "warning" : "info";
-      
+
+      const severity: Severity =
+        riskLevel === "critical" || riskLevel === "high"
+          ? "critical"
+          : riskLevel === "medium" || riskLevel === "moderate"
+            ? "warning"
+            : "info";
+
       speak(message, { severity });
     },
     [speak, config.announceScanResults]
@@ -320,13 +366,20 @@ export function useVoiceAnnouncements() {
 
   // Stop current playback
   const stop = useCallback(() => {
-    if (synthRef.current) {
-      synthRef.current.cancel();
+    if (currentHowlRef.current) {
+      currentHowlRef.current.stop();
+      currentHowlRef.current.unload();
+      currentHowlRef.current = null;
     }
+
+    // Also stop Web Speech if it's playing
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
     queueRef.current = [];
     setIsSpeaking(false);
     isProcessingRef.current = false;
-    utteranceRef.current = null;
   }, []);
 
   // Update config
@@ -340,13 +393,17 @@ export function useVoiceAnnouncements() {
       const newEnabled = !prev.enabled;
       if (!newEnabled) {
         // Stop any current playback when disabling
-        if (synthRef.current) {
-          synthRef.current.cancel();
+        if (currentHowlRef.current) {
+          currentHowlRef.current.stop();
+          currentHowlRef.current.unload();
+          currentHowlRef.current = null;
+        }
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
         }
         queueRef.current = [];
         setIsSpeaking(false);
         isProcessingRef.current = false;
-        utteranceRef.current = null;
       }
       return { ...prev, enabled: newEnabled };
     });
@@ -357,7 +414,7 @@ export function useVoiceAnnouncements() {
     config,
     status,
     isSpeaking,
-    
+
     // Actions
     speak,
     speakAlert,
@@ -365,7 +422,7 @@ export function useVoiceAnnouncements() {
     speakContractVerdict,
     speakAIAnalysis,
     stop,
-    
+
     // Config
     updateConfig,
     toggleEnabled,

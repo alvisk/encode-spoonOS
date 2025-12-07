@@ -223,7 +223,7 @@ class ActionDraftTool(BaseTool):
         """Format for detailed console output."""
         lines = [
             f"{'='*60}",
-            f"WALLET GUARDIAN ANALYSIS REPORT",
+            f"ASSERTION OS ANALYSIS REPORT",
             f"{'='*60}",
             "",
             f"Status: {header.upper()}",

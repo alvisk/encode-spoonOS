@@ -4,7 +4,7 @@ import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
 export const metadata: Metadata = {
-  title: "Wallet Guardian",
+  title: "Assertion OS",
   description: "Monitor wallets, detect anomalies, and triage alerts fast.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };

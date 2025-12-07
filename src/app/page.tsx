@@ -28,7 +28,7 @@ export default function HomePage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-indigo-300/80">
-              Wallet Guardian
+              Assertion OS
             </p>
             <h1 className="mt-1 text-3xl font-semibold text-white sm:text-4xl">
               Real-time wallet monitoring & anomaly triage

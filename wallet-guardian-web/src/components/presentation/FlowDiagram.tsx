@@ -124,6 +124,77 @@ function Connector({ direction = "horizontal", delay = 0, length = 60 }: Connect
   )
 }
 
+// Curvy SVG Connector - works inline with flexbox
+interface CurvyConnectorProps {
+  direction?: "vertical" | "horizontal"
+  curve?: "left" | "right" | "slight"  // which way it bows
+  delay?: number
+  length?: number
+}
+
+function CurvyConnector({ direction = "vertical", curve = "slight", delay = 0, length = 50 }: CurvyConnectorProps) {
+  const ref = useRef<SVGSVGElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-30px" })
+  
+  const isVertical = direction === "vertical"
+  const width = isVertical ? 30 : length
+  const height = isVertical ? length : 30
+  
+  // Calculate curve offset based on direction
+  const curveOffset = curve === "left" ? -12 : curve === "right" ? 12 : 6
+  
+  const getPath = () => {
+    if (isVertical) {
+      const midX = width / 2
+      const controlX = midX + curveOffset
+      return `M ${midX} 0 Q ${controlX} ${height / 2}, ${midX} ${height}`
+    } else {
+      const midY = height / 2
+      const controlY = midY + curveOffset
+      return `M 0 ${midY} Q ${width / 2} ${controlY}, ${width} ${midY}`
+    }
+  }
+
+  return (
+    <div className={cn("flex items-center justify-center", isVertical ? "my-1" : "mx-2")}>
+      <svg
+        ref={ref}
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="overflow-visible"
+      >
+        <motion.path
+          d={getPath()}
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth={3}
+          strokeLinecap="round"
+          initial={{ pathLength: 0 }}
+          animate={isInView ? { pathLength: 1 } : {}}
+          transition={{
+            duration: 0.4,
+            delay,
+            ease: "easeOut",
+          }}
+        />
+        {/* Arrow head */}
+        <motion.polygon
+          points="-5,-8 5,-8 0,0"
+          fill="var(--border)"
+          initial={{ opacity: 0, scale: 0 }}
+          animate={isInView ? { opacity: 1, scale: 1 } : {}}
+          transition={{ delay: delay + 0.3, duration: 0.15 }}
+          transform={isVertical 
+            ? `translate(${width / 2}, ${height - 2}) rotate(180)`
+            : `translate(${width - 2}, ${height / 2}) rotate(90)`
+          }
+        />
+      </svg>
+    </div>
+  )
+}
+
 // Main architecture diagram
 export function ArchitectureDiagram() {
   const ref = useRef<HTMLDivElement>(null)
@@ -158,11 +229,9 @@ export function ArchitectureDiagram() {
           />
         </div>
 
-        {/* Vertical connector from Agent */}
+        {/* Curvy connector to tools */}
         <div className="flex justify-center">
-          <div className="flex flex-col items-center" style={{ marginLeft: 400 }}>
-            <Connector direction="vertical" delay={0.8} length={40} />
-          </div>
+          <CurvyConnector direction="vertical" curve="slight" delay={0.8} length={50} />
         </div>
 
         {/* Tool layer */}
@@ -204,10 +273,10 @@ export function ArchitectureDiagram() {
           <span className="neo-pill text-xs">TOOL LAYER</span>
         </motion.div>
 
-        {/* Bottom connectors to external services */}
+        {/* Bottom blockchain services with curvy connectors */}
         <div className="flex justify-center gap-20">
           <div className="flex flex-col items-center">
-            <Connector direction="vertical" delay={1.6} length={40} />
+            <CurvyConnector direction="vertical" curve="left" delay={1.6} length={50} />
             <FlowBox 
               title="NEO N3" 
               subtitle="Blockchain RPC" 
@@ -217,7 +286,7 @@ export function ArchitectureDiagram() {
             />
           </div>
           <div className="flex flex-col items-center">
-            <Connector direction="vertical" delay={1.75} length={40} />
+            <CurvyConnector direction="vertical" curve="right" delay={1.7} length={50} />
             <FlowBox 
               title="BASE SEPOLIA" 
               subtitle="x402 Payments" 
@@ -383,7 +452,7 @@ export function OracleFlowDiagram() {
     { 
       num: "2", 
       title: "ORACLE", 
-      desc: "Neo Oracle fetches from Wallet Guardian API",
+      desc: "Neo Oracle fetches from Assertion OS API",
       icon: "🔮",
       color: "accent" as const,
     },
@@ -479,7 +548,7 @@ export function MultiChainArchitectureDiagram() {
     <div ref={ref} className="w-full overflow-x-auto py-8">
       <div className="min-w-[900px] mx-auto">
         {/* Top row - Client to Agent */}
-        <div className="flex items-center justify-center mb-8">
+        <div className="flex items-center justify-center mb-4">
           <FlowBox 
             title="CLIENT" 
             subtitle="Web / CLI / dApp" 
@@ -504,11 +573,9 @@ export function MultiChainArchitectureDiagram() {
           />
         </div>
 
-        {/* Vertical connector from Agent */}
+        {/* Curvy connector from Agent to Orchestrator */}
         <div className="flex justify-center">
-          <div className="flex flex-col items-center" style={{ marginLeft: 350 }}>
-            <Connector direction="vertical" delay={0.8} length={40} />
-          </div>
+          <CurvyConnector direction="vertical" curve="slight" delay={0.8} length={45} />
         </div>
 
         {/* Graph Orchestrator */}
@@ -516,7 +583,7 @@ export function MultiChainArchitectureDiagram() {
           initial={{ opacity: 0 }}
           animate={isInView ? { opacity: 1 } : {}}
           transition={{ delay: 0.9 }}
-          className="flex justify-center mb-4"
+          className="flex justify-center mb-2"
         >
           <div className="neo-card p-3 border-4 border-[var(--main)]">
             <span className="font-heading text-sm uppercase">GRAPH ORCHESTRATOR</span>
@@ -524,9 +591,9 @@ export function MultiChainArchitectureDiagram() {
           </div>
         </motion.div>
 
-        {/* Vertical connector */}
+        {/* Curvy connector to tools */}
         <div className="flex justify-center">
-          <Connector direction="vertical" delay={1.0} length={30} />
+          <CurvyConnector direction="vertical" curve="slight" delay={1.0} length={45} />
         </div>
 
         {/* Tool layer */}
@@ -534,7 +601,7 @@ export function MultiChainArchitectureDiagram() {
           initial={{ opacity: 0 }}
           animate={isInView ? { opacity: 1 } : {}}
           transition={{ delay: 1.1 }}
-          className="flex justify-center gap-3 mb-8 flex-wrap"
+          className="flex justify-center gap-3 mb-6"
         >
           {[
             { title: "WALLET", icon: "📊" },
@@ -557,15 +624,15 @@ export function MultiChainArchitectureDiagram() {
           initial={{ opacity: 0, y: -10 }}
           animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{ delay: 1.6 }}
-          className="text-center mb-8"
+          className="text-center mb-6"
         >
           <span className="neo-pill text-xs">8 SPOONOS TOOLS</span>
         </motion.div>
 
-        {/* Bottom connectors to external services */}
-        <div className="flex justify-center gap-12">
+        {/* Bottom blockchain services with curvy connectors */}
+        <div className="flex justify-center gap-16">
           <div className="flex flex-col items-center">
-            <Connector direction="vertical" delay={1.7} length={40} />
+            <CurvyConnector direction="vertical" curve="left" delay={1.7} length={50} />
             <FlowBox 
               title="NEO N3" 
               subtitle="+ Oracle Contract" 
@@ -575,7 +642,7 @@ export function MultiChainArchitectureDiagram() {
             />
           </div>
           <div className="flex flex-col items-center">
-            <Connector direction="vertical" delay={1.8} length={40} />
+            <CurvyConnector direction="vertical" curve="slight" delay={1.75} length={50} />
             <FlowBox 
               title="ETHEREUM" 
               subtitle="Blockscout API" 
@@ -585,7 +652,7 @@ export function MultiChainArchitectureDiagram() {
             />
           </div>
           <div className="flex flex-col items-center">
-            <Connector direction="vertical" delay={1.85} length={40} />
+            <CurvyConnector direction="vertical" curve="right" delay={1.8} length={50} />
             <FlowBox 
               title="BASE SEPOLIA" 
               subtitle="x402 Payments" 
