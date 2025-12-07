@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BellRing,
@@ -227,7 +227,12 @@ const DEFAULT_WALLET: Wallet = {
 
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
-  const activities = mockActivityByAddress[primaryWallet.address] ?? [];
+  
+  // Aggregate activities from all wallets and sort by timestamp
+  const allActivities = Object.values(mockActivityByAddress)
+    .flat()
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const activities = allActivities;
 
   const [scanAddress, setScanAddress] = useState("");
   const [scanStatus, setScanStatus] = useState<
@@ -315,37 +320,14 @@ export default function HomePage() {
     [scanWallet],
   );
 
-  // Streaming text animation effect
-  const streamText = useCallback((text: string) => {
-    setStreamedText("");
-    setIsStreaming(true);
-    streamingRef.current = true;
-
-    let currentIndex = 0;
-    const charsPerTick = 3; // Characters to add per tick for faster streaming
-    const tickInterval = 15; // Milliseconds between ticks
-
-    const tick = () => {
-      if (!streamingRef.current) return;
-
-      if (currentIndex < text.length) {
-        const nextIndex = Math.min(currentIndex + charsPerTick, text.length);
-        setStreamedText(text.slice(0, nextIndex));
-        currentIndex = nextIndex;
-        setTimeout(tick, tickInterval);
-      } else {
-        setIsStreaming(false);
-        streamingRef.current = false;
-      }
-    };
-
-    tick();
-  }, []);
+  // Abort controller for cancelling streaming requests
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Stop streaming when component unmounts or new scan starts
   useEffect(() => {
     return () => {
       streamingRef.current = false;
+      abortControllerRef.current?.abort();
     };
   }, []);
 
@@ -475,13 +457,15 @@ export default function HomePage() {
       }
     };
 
-    // Fetch AI analysis (slower, streams when complete)
+    // Fetch AI analysis with real streaming
     const fetchAiAnalysis = async () => {
-      try {
-        let spoonRes: Response;
+      // Cancel any existing streaming request
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
 
+      try {
         if (usePaywalled) {
-          // Use the x402 paywalled endpoint
+          // Use the x402 paywalled endpoint (non-streaming for now)
           const headers: HeadersInit = {
             "Content-Type": "application/json",
           };
@@ -502,7 +486,7 @@ export default function HomePage() {
             `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
           );
 
-          spoonRes = await fetch(
+          const spoonRes = await fetch(
             `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
             {
               method: "POST",
@@ -510,6 +494,7 @@ export default function HomePage() {
               body: JSON.stringify({
                 prompt: `analyze wallet ${scanAddress.trim()}`,
               }),
+              signal: abortControllerRef.current.signal,
             },
           );
 
@@ -541,31 +526,91 @@ export default function HomePage() {
             setScanStatus("payment_required");
             return;
           }
+
+          if (!spoonRes.ok) {
+            const err = (await spoonRes.json().catch(() => ({}))) as {
+              detail?: string;
+            };
+            throw new Error(err.detail ?? "SpoonOS API error");
+          }
+
+          const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
+          setAiAnalysis(spoonData);
+          setStreamedText(spoonData.result ?? "");
         } else {
-          // Use the free endpoint
+          // Use the free streaming endpoint
           const prompt = encodeURIComponent(
             `analyze wallet ${scanAddress.trim()}`,
           );
-          spoonRes = await fetch(`${SPOONOS_API_URL}/analyze?prompt=${prompt}`, {
-            method: "POST",
-          });
-        }
+          
+          setIsStreaming(true);
+          streamingRef.current = true;
+          setStreamedText("");
 
-        if (!spoonRes.ok) {
-          const err = (await spoonRes.json().catch(() => ({}))) as {
-            detail?: string;
-          };
-          throw new Error(err.detail ?? "SpoonOS API error");
-        }
+          const response = await fetch(
+            `${SPOONOS_API_URL}/analyze/stream?prompt=${prompt}`,
+            {
+              method: "POST",
+              signal: abortControllerRef.current.signal,
+            },
+          );
 
-        const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
-        setAiAnalysis(spoonData);
-        // Start streaming the text
-        if (spoonData.result) {
-          streamText(spoonData.result);
+          if (!response.ok) {
+            const err = (await response.json().catch(() => ({}))) as {
+              detail?: string;
+            };
+            throw new Error(err.detail ?? "SpoonOS API error");
+          }
+
+          const reader = response.body?.getReader();
+          if (!reader) {
+            throw new Error("No response body");
+          }
+
+          const decoder = new TextDecoder();
+          let fullText = "";
+
+          try {
+            while (streamingRef.current) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              // Parse SSE format: data: <content>\n\n
+              const lines = chunk.split("\n");
+              for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                  const data = line.slice(6); // Remove "data: " prefix
+                  if (data === "[DONE]") {
+                    streamingRef.current = false;
+                    setIsStreaming(false);
+                    break;
+                  } else if (data.startsWith("[ERROR]")) {
+                    throw new Error(data.slice(8));
+                  } else {
+                    fullText += data;
+                    setStreamedText(fullText);
+                  }
+                }
+              }
+            }
+          } finally {
+            reader.releaseLock();
+          }
+
+          // Set final AI analysis
+          setAiAnalysis({ result: fullText });
+          setIsStreaming(false);
+          streamingRef.current = false;
         }
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          console.log("AI analysis request aborted");
+          return;
+        }
         console.error("AI analysis failed:", err);
+        setIsStreaming(false);
+        streamingRef.current = false;
         // Don't set error status - wallet data is still valid
         // Just leave AI analysis as null
       }
@@ -2371,40 +2416,76 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockWallets.map((wallet, i) => (
-                      <TableRow
-                        key={wallet.address}
-                        className={`border-b-2 border-black ${i % 2 === 0 ? "bg-white" : "bg-[#F5F5F5]"}`}
-                      >
-                        <TableCell className="font-black text-black uppercase">
-                          {wallet.label}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-black">
-                          {wallet.address}
-                        </TableCell>
-                        <TableCell className="font-black text-black">
-                          {formatUSD(wallet.balanceUSD)}
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={`neo-pill ${riskTone(wallet.riskScore)} border-3 border-black px-3 py-1 text-xs font-black shadow-[3px_3px_0_0_#000]`}
-                          >
-                            {wallet.riskScore}/100
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs font-bold text-black uppercase">
-                          {wallet.chains.join(", ")}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-black/70">
-                          {new Intl.DateTimeFormat("en", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }).format(new Date(wallet.lastActive))}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {mockWallets.map((wallet, i) => {
+                      const explorerUrl = wallet.chains[0] === "Ethereum" 
+                        ? `https://etherscan.io/address/${wallet.address}`
+                        : wallet.chains[0] === "Neo N3"
+                          ? `https://neotube.io/address/${wallet.address}`
+                          : undefined;
+                      return (
+                        <TableRow
+                          key={wallet.address}
+                          className={`border-b-2 border-black ${i % 2 === 0 ? "bg-white" : "bg-[#F5F5F5]"} ${wallet.riskScore >= 70 ? "bg-[#FFE5E5]" : ""}`}
+                        >
+                          <TableCell className="font-black text-black">
+                            <div className="flex flex-wrap gap-1">
+                              {wallet.label}
+                              {wallet.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className={`text-xs px-1.5 py-0.5 border border-black/30 ${
+                                    tag === "exploited" || tag === "high-risk" || tag === "controversial"
+                                      ? "bg-[#FF0000] text-white"
+                                      : tag === "trusted" || tag === "regulated"
+                                        ? "bg-[#00FF00] text-black"
+                                        : "bg-gray-200 text-black"
+                                  }`}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-black">
+                            <div className="flex items-center gap-2">
+                              <span title={wallet.address}>
+                                {wallet.address.slice(0, 8)}...{wallet.address.slice(-6)}
+                              </span>
+                              {explorerUrl && (
+                                <a
+                                  href={explorerUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[#00BFFF] hover:underline"
+                                >
+                                  View
+                                </a>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-black text-black">
+                            {formatUSD(wallet.balanceUSD)}
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={`neo-pill ${riskTone(wallet.riskScore)} border-3 border-black px-3 py-1 text-xs font-black shadow-[3px_3px_0_0_#000]`}
+                            >
+                              {wallet.riskScore}/100
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs font-bold text-black uppercase">
+                            {wallet.chains.join(", ")}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-black/70">
+                            {new Intl.DateTimeFormat("en", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }).format(new Date(wallet.lastActive))}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -2472,27 +2553,36 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           >
                             {alert.status}
                           </span>
+                          <span className="neo-pill border-3 border-black bg-[#00BFFF] px-4 py-1 text-xs font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
+                            {alert.chain}
+                          </span>
                         </div>
                         <h3 className="flex items-center gap-3 text-xl font-black tracking-wide text-black uppercase">
                           <AlertTriangle className="h-6 w-6" strokeWidth={3} />
                           {alert.title}
                         </h3>
-                        <p className="font-mono text-xs tracking-wider text-black/60 uppercase">
-                          ID: {alert.id} {"//"} ADDR: {alert.walletAddress}
-                        </p>
+                        <div className="space-y-1">
+                          <p className="font-mono text-xs tracking-wider text-black/60 uppercase">
+                            ID: {alert.id}
+                          </p>
+                          <p className="font-mono text-xs text-black/80 break-all">
+                            {alert.walletAddress}
+                          </p>
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-3">
                         <span className="border-4 border-black bg-white px-3 py-2 font-mono text-xs font-black text-black shadow-[4px_4px_0_0_#000]">
                           {new Intl.DateTimeFormat("en", {
+                            year: "numeric",
                             month: "short",
                             day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
                           }).format(new Date(alert.createdAt))}
                         </span>
-                        <Badge className="neo-pill animate-pulse border-4 border-black bg-[#FFFF00] font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
-                          Action Required
-                        </Badge>
+                        {alert.status !== "closed" && (
+                          <Badge className="neo-pill animate-pulse border-4 border-black bg-[#FFFF00] font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
+                            Action Required
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
@@ -2501,7 +2591,7 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                     </p>
 
                     <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t-4 border-black pt-4">
-                      <div>
+                      <div className="flex-1">
                         <p className="text-xs font-black tracking-widest text-black/60 uppercase">
                           {"//"} Recommended Action
                         </p>
@@ -2509,12 +2599,25 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           {alert.action}
                         </p>
                       </div>
-                      <Button
-                        size="sm"
-                        className="neo-button border-4 border-black bg-black px-6 font-black tracking-wider text-white uppercase shadow-[6px_6px_0_0_#FFFF00] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#FFFF00] active:translate-x-2 active:translate-y-2 active:shadow-none"
-                      >
-                        Investigate
-                      </Button>
+                      <div className="flex gap-2">
+                        {alert.explorerUrl && (
+                          <Button
+                            size="sm"
+                            asChild
+                            className="neo-button border-4 border-black bg-[#00BFFF] px-4 font-black tracking-wider text-black uppercase shadow-[4px_4px_0_0_#000] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000]"
+                          >
+                            <a href={alert.explorerUrl} target="_blank" rel="noreferrer">
+                              Explorer
+                            </a>
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className="neo-button border-4 border-black bg-black px-6 font-black tracking-wider text-white uppercase shadow-[6px_6px_0_0_#FFFF00] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#FFFF00] active:translate-x-2 active:translate-y-2 active:shadow-none"
+                        >
+                          Investigate
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -2540,10 +2643,14 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                     {activities.map((tx) => (
                       <div
                         key={tx.id ?? tx.hash}
-                        className="neo-card border-black bg-[#F5F5F5] px-4 py-4 text-sm"
+                        className={`neo-card border-black px-4 py-4 text-sm ${
+                          tx.riskFlag ? "bg-[#FFE5E5]" : "bg-[#F5F5F5]"
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black tracking-wider text-black uppercase">
+                          <span className={`text-xs font-black tracking-wider uppercase ${
+                            tx.type === "exploit" ? "text-[#FF0000]" : "text-black"
+                          }`}>
                             {tx.type}
                           </span>
                           <span className="text-xs font-bold text-black/60 uppercase">
@@ -2551,21 +2658,32 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           </span>
                         </div>
                         <p className="mt-1 text-lg font-black text-black">
-                          {tx.tokenSymbol} • {formatUSD(tx.amountUSD)}
+                          {tx.tokenSymbol} {tx.amountUSD > 0 && `• ${formatUSD(tx.amountUSD)}`}
                         </p>
-                        {tx.riskFlag ? (
+                        {tx.riskFlag && (
                           <p className="mt-2 flex items-center gap-1 text-xs font-black text-[#FF0000] uppercase">
                             <AlertTriangle className="h-3 w-3" /> {tx.riskFlag}
                           </p>
-                        ) : null}
-                        <p className="mt-2 font-mono text-xs text-black/50">
-                          {new Intl.DateTimeFormat("en", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }).format(new Date(tx.timestamp))}
-                        </p>
+                        )}
+                        <div className="mt-2 flex items-center justify-between">
+                          <p className="font-mono text-xs text-black/50">
+                            {new Intl.DateTimeFormat("en", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }).format(new Date(tx.timestamp))}
+                          </p>
+                          {tx.explorerUrl && (
+                            <a
+                              href={tx.explorerUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-black text-[#00BFFF] hover:underline"
+                            >
+                              View
+                            </a>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
