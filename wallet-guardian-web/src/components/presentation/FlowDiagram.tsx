@@ -1,8 +1,7 @@
 "use client"
 
-import { ArcherContainer, ArcherElement, type ArcherContainerRef } from "react-archer"
 import { motion, useInView } from "framer-motion"
-import { forwardRef, useEffect, useRef } from "react"
+import { useRef } from "react"
 import { cn } from "~/lib/utils"
 
 interface FlowBoxProps {
@@ -19,63 +18,49 @@ const colorVariants = {
   accent: "bg-[var(--chart-5)] border-border text-black",
 }
 
-const FlowBox = forwardRef<HTMLDivElement, FlowBoxProps>(
-  function FlowBox({ title, subtitle, icon, color = "default", delay = 0 }, forwardedRef) {
-    const internalRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(internalRef, { once: true, margin: "-50px" })
+function FlowBox({ title, subtitle, icon, color = "default", delay = 0 }: FlowBoxProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const isInView = useInView(ref, { once: true, margin: "-50px" })
 
-    // Merge refs - react-archer needs access to the DOM element
-    const setRefs = (node: HTMLDivElement | null) => {
-      // Set internal ref
-      (internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node
-      // Forward ref
-      if (typeof forwardedRef === "function") {
-        forwardedRef(node)
-      } else if (forwardedRef) {
-        forwardedRef.current = node
-      }
-    }
-
-    return (
-      <motion.div
-        ref={setRefs}
-        initial={{ 
-          scale: 0, 
-          rotate: -20,
-          opacity: 0,
-        }}
-        animate={isInView ? { 
-          scale: 1, 
-          rotate: 0,
-          opacity: 1,
-        } : {}}
-        transition={{
-          type: "spring",
-          stiffness: 400,
-          damping: 20,
-          delay,
-        }}
-        className={cn(
-          "border-4 p-4 min-w-[140px] text-center relative",
-          colorVariants[color]
-        )}
-        style={{ boxShadow: "var(--shadow)" }}
-      >
-        {icon && (
-          <div className="text-2xl mb-1">{icon}</div>
-        )}
-        <div className="font-heading text-sm uppercase tracking-wider">
-          {title}
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ 
+        scale: 0, 
+        rotate: -20,
+        opacity: 0,
+      }}
+      animate={isInView ? { 
+        scale: 1, 
+        rotate: 0,
+        opacity: 1,
+      } : {}}
+      transition={{
+        type: "spring",
+        stiffness: 400,
+        damping: 20,
+        delay,
+      }}
+      className={cn(
+        "border-4 p-4 min-w-[140px] text-center relative",
+        colorVariants[color]
+      )}
+      style={{ boxShadow: "var(--shadow)" }}
+    >
+      {icon && (
+        <div className="text-2xl mb-1">{icon}</div>
+      )}
+      <div className="font-heading text-sm uppercase tracking-wider">
+        {title}
+      </div>
+      {subtitle && (
+        <div className="text-xs opacity-70 mt-1">
+          {subtitle}
         </div>
-        {subtitle && (
-          <div className="text-xs opacity-70 mt-1">
-            {subtitle}
-          </div>
-        )}
-      </motion.div>
-    )
-  }
-)
+      )}
+    </motion.div>
+  )
+}
 
 interface ConnectorProps {
   direction?: "horizontal" | "vertical" | "down-right" | "down-left"
@@ -557,187 +542,126 @@ export function OracleFlowDiagram() {
 // Updated Architecture Diagram with multi-chain support
 export function MultiChainArchitectureDiagram() {
   const ref = useRef<HTMLDivElement>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const archerRef = useRef<ArcherContainerRef | null>(null)
   const isInView = useInView(ref, { once: true, margin: "-100px" })
-
-  // Refresh arrows after animations complete
-  useEffect(() => {
-    if (isInView) {
-      // Refresh multiple times during animation to keep arrows in sync
-      const timers = [500, 1000, 1500, 2000, 2500].map((delay) =>
-        setTimeout(() => archerRef.current?.refreshScreen(), delay)
-      )
-      return () => timers.forEach(clearTimeout)
-    }
-  }, [isInView])
-
-  const tools = [
-    { id: "tool-wallet", title: "WALLET", icon: "📊" },
-    { id: "tool-risk", title: "RISK", icon: "⚠️" },
-    { id: "tool-scanner", title: "SCANNER", icon: "🔍" },
-    { id: "tool-monitor", title: "MONITOR", icon: "🔔" },
-    { id: "tool-portfolio", title: "PORTFOLIO", icon: "💼" },
-  ]
-
-  const blockchains = [
-    { id: "neo", title: "NEO N3", subtitle: "+ Oracle Contract", icon: "⛓️", color: "main" as const, delay: 1.9 },
-    { id: "eth", title: "ETHEREUM", subtitle: "Blockscout API", icon: "🔷", color: "accent" as const, delay: 2.0 },
-    { id: "base", title: "BASE SEPOLIA", subtitle: "x402 Payments", icon: "💰", color: "default" as const, delay: 2.1 },
-  ]
 
   return (
     <div ref={ref} className="w-full overflow-x-auto py-8">
-      <ArcherContainer
-        ref={archerRef}
-        strokeColor="var(--border)"
-        strokeWidth={3}
-        endShape={{ arrow: { arrowLength: 8, arrowThickness: 6 } }}
-        lineStyle="curve"
-        svgContainerStyle={{ zIndex: 0 }}
-      >
-        <div className="min-w-[900px] mx-auto">
-          {/* Top row - Client to Agent */}
-          <div className="flex items-center justify-center gap-16 mb-8">
-            <ArcherElement
-              id="client"
-              relations={[
-                {
-                  targetId: "gateway",
-                  targetAnchor: "left",
-                  sourceAnchor: "right",
-                },
-              ]}
-            >
-              <FlowBox
-                title="CLIENT"
-                subtitle="Web / CLI / dApp"
-                icon="👤"
-                delay={0}
-              />
-            </ArcherElement>
+      <div className="min-w-[900px] mx-auto">
+        {/* Top row - Client to Agent */}
+        <div className="flex items-center justify-center mb-4">
+          <FlowBox 
+            title="CLIENT" 
+            subtitle="Web / CLI / dApp" 
+            icon="👤"
+            delay={0}
+          />
+          <Connector delay={0.2} length={60} />
+          <FlowBox 
+            title="x402 GATEWAY" 
+            subtitle="Pay per invoke" 
+            icon="💳"
+            color="accent"
+            delay={0.3}
+          />
+          <Connector delay={0.5} length={60} />
+          <FlowBox 
+            title="SPOONOS AGENT" 
+            subtitle="ToolCallAgent" 
+            icon="🤖"
+            color="main"
+            delay={0.6}
+          />
+        </div>
 
-            <ArcherElement
-              id="gateway"
-              relations={[
-                {
-                  targetId: "agent",
-                  targetAnchor: "left",
-                  sourceAnchor: "right",
-                },
-              ]}
-            >
-              <FlowBox
-                title="x402 GATEWAY"
-                subtitle="Pay per invoke"
-                icon="💳"
-                color="accent"
-                delay={0.3}
-              />
-            </ArcherElement>
+        {/* Curvy connector from Agent to Orchestrator */}
+        <div className="flex justify-center">
+          <CurvyConnector direction="vertical" curve="slight" delay={0.8} length={45} />
+        </div>
 
-            <ArcherElement
-              id="agent"
-              relations={[
-                {
-                  targetId: "orchestrator",
-                  targetAnchor: "top",
-                  sourceAnchor: "bottom",
-                },
-              ]}
-            >
-              <FlowBox
-                title="SPOONOS AGENT"
-                subtitle="ToolCallAgent"
-                icon="🤖"
-                color="main"
-                delay={0.6}
-              />
-            </ArcherElement>
+        {/* Graph Orchestrator */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.9 }}
+          className="flex justify-center mb-2"
+        >
+          <div className="neo-card p-3 border-4 border-[var(--main)]">
+            <span className="font-heading text-sm uppercase">GRAPH ORCHESTRATOR</span>
+            <span className="text-xs opacity-60 ml-2">DAG Computation</span>
           </div>
+        </motion.div>
 
-          {/* Graph Orchestrator */}
-          <div className="flex justify-center mb-8">
-            <ArcherElement
-              id="orchestrator"
-              relations={tools.map((tool) => ({
-                targetId: tool.id,
-                targetAnchor: "top" as const,
-                sourceAnchor: "bottom" as const,
-              }))}
-            >
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={isInView ? { opacity: 1 } : {}}
-                transition={{ delay: 0.9 }}
-                className="neo-card p-3 border-4 border-[var(--main)]"
-              >
-                <span className="font-heading text-sm uppercase">GRAPH ORCHESTRATOR</span>
-                <span className="text-xs opacity-60 ml-2">DAG Computation</span>
-              </motion.div>
-            </ArcherElement>
+        {/* Curvy connector to tools */}
+        <div className="flex justify-center">
+          <CurvyConnector direction="vertical" curve="slight" delay={1.0} length={45} />
+        </div>
+
+        {/* Tool layer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ delay: 1.1 }}
+          className="flex justify-center gap-3 mb-6"
+        >
+          {[
+            { title: "WALLET", icon: "📊" },
+            { title: "RISK", icon: "⚠️" },
+            { title: "SCANNER", icon: "🔍" },
+            { title: "MONITOR", icon: "🔔" },
+            { title: "PORTFOLIO", icon: "💼" },
+          ].map((tool, i) => (
+            <FlowBox 
+              key={tool.title}
+              title={tool.title} 
+              icon={tool.icon}
+              delay={1.2 + i * 0.08}
+            />
+          ))}
+        </motion.div>
+
+        {/* Label for tools */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 1.6 }}
+          className="text-center mb-6"
+        >
+          <span className="neo-pill text-xs">8 SPOONOS TOOLS</span>
+        </motion.div>
+
+        {/* Bottom blockchain services with curvy connectors */}
+        <div className="flex justify-center gap-16">
+          <div className="flex flex-col items-center">
+            <CurvyConnector direction="vertical" curve="left" delay={1.7} length={50} />
+            <FlowBox 
+              title="NEO N3" 
+              subtitle="+ Oracle Contract" 
+              icon="⛓️"
+              color="main"
+              delay={1.9}
+            />
           </div>
-
-          {/* Tool layer */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={isInView ? { opacity: 1 } : {}}
-            transition={{ delay: 1.1 }}
-            className="flex justify-center gap-3 mb-6"
-          >
-            {tools.map((tool, i) => {
-              // Middle tool (scanner) connects to all blockchains
-              const isMiddleTool = tool.id === "tool-scanner"
-              return (
-                <ArcherElement
-                  key={tool.id}
-                  id={tool.id}
-                  relations={
-                    isMiddleTool
-                      ? blockchains.map((chain) => ({
-                          targetId: chain.id,
-                          targetAnchor: "top" as const,
-                          sourceAnchor: "bottom" as const,
-                        }))
-                      : []
-                  }
-                >
-                  <FlowBox
-                    title={tool.title}
-                    icon={tool.icon}
-                    delay={1.2 + i * 0.08}
-                  />
-                </ArcherElement>
-              )
-            })}
-          </motion.div>
-
-          {/* Label for tools */}
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 1.6 }}
-            className="text-center mb-6"
-          >
-            <span className="neo-pill text-xs">8 SPOONOS TOOLS</span>
-          </motion.div>
-
-          {/* Bottom blockchain services */}
-          <div className="flex justify-center gap-16">
-            {blockchains.map((chain) => (
-              <ArcherElement key={chain.id} id={chain.id}>
-                <FlowBox
-                  title={chain.title}
-                  subtitle={chain.subtitle}
-                  icon={chain.icon}
-                  color={chain.color}
-                  delay={chain.delay}
-                />
-              </ArcherElement>
-            ))}
+          <div className="flex flex-col items-center">
+            <CurvyConnector direction="vertical" curve="slight" delay={1.75} length={50} />
+            <FlowBox 
+              title="ETHEREUM" 
+              subtitle="Blockscout API" 
+              icon="🔷"
+              color="accent"
+              delay={2.0}
+            />
+          </div>
+          <div className="flex flex-col items-center">
+            <CurvyConnector direction="vertical" curve="right" delay={1.8} length={50} />
+            <FlowBox 
+              title="BASE SEPOLIA" 
+              subtitle="x402 Payments" 
+              icon="💰"
+              delay={2.1}
+            />
           </div>
         </div>
-      </ArcherContainer>
+      </div>
     </div>
   )
 }
