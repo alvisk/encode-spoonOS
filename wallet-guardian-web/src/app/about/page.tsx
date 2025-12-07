@@ -408,7 +408,7 @@ export default function AboutPage() {
                     ))}
                   </div>
                   <div className="p-3 bg-[var(--main)] border-2 border-border font-mono text-xs text-black font-bold">
-                    <div>• Web Dashboard • Voice Alerts • CLI</div>
+                    <div>• Web Dashboard • CLI</div>
                   </div>
                 </div>
               </div>

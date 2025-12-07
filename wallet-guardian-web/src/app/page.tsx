@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createParser, type EventSourceMessage } from "eventsource-parser";
 import {
   AlertTriangle,
   BellRing,
@@ -20,10 +21,7 @@ import {
   FileText,
   Copy,
   Check,
-  Volume2,
-  VolumeX,
 } from "lucide-react";
-import { useVoiceAnnouncements } from "~/hooks/useVoiceAnnouncements";
 import { PaymentFlow } from "~/components/PaymentFlow";
 import { WalletToolsDashboard } from "~/components/WalletToolsDashboard";
 import { Badge } from "~/components/ui/badge";
@@ -60,7 +58,8 @@ type Activity = NonNullable<(typeof mockActivityByAddress)[string]>[number];
 
 // SpoonOS API response type
 type SpoonOSAnalysis = {
-  result: string;
+  result?: string;
+  response?: string;
   payer?: string;
 };
 
@@ -232,9 +231,6 @@ const DEFAULT_WALLET: Wallet = {
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
   
-  // Voice announcements hook
-  const voice = useVoiceAnnouncements();
-  
   // Aggregate activities from all wallets and sort by timestamp
   const allActivities = Object.values(mockActivityByAddress)
     .flat()
@@ -332,10 +328,6 @@ export default function HomePage() {
 
   // Abort controller for cancelling streaming requests
   const abortControllerRef = useRef<AbortController | null>(null);
-  
-  // Track previous values for voice announcements
-  const prevAiAnalysisRef = useRef<SpoonOSAnalysis | null>(null);
-  const prevContractResultRef = useRef<MaliciousContractResult | null>(null);
 
   // Stop streaming when component unmounts or new scan starts
   useEffect(() => {
@@ -345,43 +337,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // Voice announcement when AI analysis completes
-  useEffect(() => {
-    if (
-      aiAnalysis && 
-      aiAnalysis !== prevAiAnalysisRef.current && 
-      scanWallet?.address &&
-      !isStreaming
-    ) {
-      // Extract risk level from the analysis text
-      const riskMatch = /risk[:\s]*level[:\s]*(\w+)/i.exec(aiAnalysis.result);
-      const riskLevel = riskMatch?.[1] ?? "unknown";
-      
-      // Extract a brief summary (first sentence or key finding)
-      const firstSentence = aiAnalysis.result.split(/[.!?]/)[0];
-      const keyFinding = firstSentence && firstSentence.length < 150 
-        ? firstSentence.trim() 
-        : undefined;
-      
-      voice.speakAIAnalysis(scanWallet.address, riskLevel, keyFinding);
-      prevAiAnalysisRef.current = aiAnalysis;
-    }
-  }, [aiAnalysis, scanWallet?.address, isStreaming, voice]);
 
-  // Voice announcement when contract scan completes
-  useEffect(() => {
-    if (
-      contractResult && 
-      contractResult !== prevContractResultRef.current
-    ) {
-      voice.speakContractVerdict(
-        contractResult.is_malicious,
-        contractResult.contract_address,
-        contractResult.risk_score
-      );
-      prevContractResultRef.current = contractResult;
-    }
-  }, [contractResult, voice]);
 
   // Connect to NeoLine dAPI once the provider signals READY.
   useEffect(() => {
@@ -622,33 +578,33 @@ export default function HomePage() {
           const decoder = new TextDecoder();
           let fullText = "";
 
+          // Create SSE parser using eventsource-parser library
+          const parser = createParser({
+            onEvent: (event: EventSourceMessage) => {
+              const data = event.data;
+              if (data === "[DONE]") {
+                streamingRef.current = false;
+                setIsStreaming(false);
+              } else if (data === "[CLEAR]") {
+                // Clear previous text (used when switching from status to actual response)
+                fullText = "";
+                setStreamedText(fullText);
+              } else if (data.startsWith("[ERROR]")) {
+                throw new Error(data.slice(8));
+              } else {
+                fullText += data;
+                setStreamedText(fullText);
+              }
+            },
+          });
+
           try {
             while (streamingRef.current) {
               const { done, value } = await reader.read();
               if (done) break;
 
               const chunk = decoder.decode(value, { stream: true });
-              // Parse SSE format: data: <content>\n\n
-              const lines = chunk.split("\n");
-              for (const line of lines) {
-                if (line.startsWith("data: ")) {
-                  const data = line.slice(6); // Remove "data: " prefix
-                  if (data === "[DONE]") {
-                    streamingRef.current = false;
-                    setIsStreaming(false);
-                    break;
-                  } else if (data === "[CLEAR]") {
-                    // Clear previous text (used when switching from status to actual response)
-                    fullText = "";
-                    setStreamedText(fullText);
-                  } else if (data.startsWith("[ERROR]")) {
-                    throw new Error(data.slice(8));
-                  } else {
-                    fullText += data;
-                    setStreamedText(fullText);
-                  }
-                }
-              }
+              parser.feed(chunk);
             }
           } finally {
             reader.releaseLock();
@@ -703,7 +659,8 @@ export default function HomePage() {
       throw new Error(err.detail ?? "SpoonOS API error");
     }
     const data = (await res.json()) as SpoonOSAnalysis;
-    return data.result;
+    // API may return 'response' or 'result' field depending on endpoint
+    return data.response ?? data.result ?? "";
   };
 
   // Validity Score Tool
@@ -928,10 +885,11 @@ export default function HomePage() {
         `draft action message for wallet ${targetAddress} with risk level ${riskLevel} and flags ${riskFlags.join(", ")} for ${reportChannel} channel`,
       );
       
+      const message = result ?? "Unable to generate report. Please try again.";
       setReportResult({
         channel: reportChannel,
-        message: result,
-        actions: extractActions(result),
+        message: message,
+        actions: extractActions(message),
         risk_level: riskLevel,
         generated_at: new Date().toISOString(),
       });
@@ -945,7 +903,10 @@ export default function HomePage() {
   };
 
   // Helper to extract action items from report text
-  const extractActions = (text: string): string[] => {
+  const extractActions = (text: string | undefined | null): string[] => {
+    if (!text) {
+      return ["Review wallet activity", "Monitor for changes"];
+    }
     const actions: string[] = [];
     const lines = text.split('\n');
     const bulletRegex = /^[-•*]\s+/;
@@ -1007,30 +968,7 @@ export default function HomePage() {
                 <a href="#ui">Command Center</a>
               </Button>
               
-              {/* Voice Toggle Button */}
-              <Button
-                onClick={voice.toggleEnabled}
-                className={`neo-button border-4 border-black px-4 font-bold tracking-wider uppercase shadow-[8px_8px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[4px_4px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none ${
-                  voice.config.enabled 
-                    ? "bg-[#00FF00] text-black" 
-                    : "bg-gray-300 text-black/50"
-                }`}
-                title={voice.config.enabled ? "Voice alerts enabled" : "Voice alerts disabled"}
-              >
-                {voice.config.enabled ? (
-                  <Volume2 className="h-5 w-5" strokeWidth={3} />
-                ) : (
-                  <VolumeX className="h-5 w-5" strokeWidth={3} />
-                )}
-                <span className="ml-2 hidden sm:inline">
-                  {voice.config.enabled ? "Voice On" : "Voice Off"}
-                </span>
-              </Button>
-              {voice.isSpeaking && (
-                <span className="animate-pulse text-xs font-black text-[#00FF00] uppercase">
-                  Speaking...
-                </span>
-              )}
+
             </div>
           </div>
           <div className="neo-card flex flex-col gap-3 border-4 border-black bg-black px-6 py-5 text-sm text-white shadow-[8px_8px_0_0_#FFFF00]">
@@ -1255,11 +1193,6 @@ export default function HomePage() {
                       "[x402] Payment complete, retrying with header length:",
                       signedPaymentHeader.length,
                     );
-                    // Voice announcement for payment completion
-                    voice.speakAlert(
-                      "Payment authorized successfully. Starting wallet analysis.",
-                      "info"
-                    );
                     // Pass payment header directly to avoid React state timing issues
                     void runSelfScan(signedPaymentHeader);
                   }}
@@ -1271,7 +1204,7 @@ export default function HomePage() {
                 />
               )}
 
-              {scanWallet ? (
+              {scanWallet && scanStatus !== "payment_required" ? (
                 <>
                   {/* AI ANALYSIS CARD - SpoonOS Response */}
                   {aiAnalysis ? (
@@ -1721,7 +1654,7 @@ export default function HomePage() {
           </Card>
 
           {/* SPOONOS CARD */}
-          <Card className="neo-card border-black bg-black text-white">
+          <Card className="neo-card border-black bg-black text-white self-start">
             <CardHeader className="border-b-4 border-white/20 pb-4">
               <CardTitle className="text-lg font-black tracking-wider text-[#FFFF00] uppercase">
                 {"//"} SpoonOS Agent
@@ -1730,11 +1663,11 @@ export default function HomePage() {
                 Deep LLM-powered wallet analysis.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4 text-sm text-white">
+            <CardContent className="space-y-4 pt-4 text-sm text-white min-h-0 overflow-hidden">
               <p className="font-black tracking-wide text-[#00FF00] uppercase">
                 Live API:
               </p>
-              <pre className="border-4 border-white/30 bg-black px-4 py-3 font-mono text-xs whitespace-pre-wrap text-[#00FF00] shadow-[6px_6px_0_0_#FFFF00]">
+              <pre className="border-4 border-white/30 bg-black px-4 py-3 font-mono text-xs whitespace-pre-wrap break-all text-[#00FF00] shadow-[6px_6px_0_0_#FFFF00] overflow-x-auto">
                 {`# Health Check
 curl ${SPOONOS_API_URL}/health
 
@@ -1771,705 +1704,9 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
       </div>
 
       {/* BUSINESS DASHBOARD SECTION */}
+      <WalletToolsDashboard />
+
       <section className="user-story-section space-y-6" data-story="business">
-        <div className="section-header">
-          <div className="section-icon bg-[#00BFFF]">
-            <Radar className="h-10 w-10 text-black" strokeWidth={2.5} />
-          </div>
-          <div className="section-title-group">
-            <p className="section-eyebrow">User Story</p>
-            <h2 className="section-title">Monitor Connected Wallets</h2>
-            <p className="section-subtitle">
-              dApp operators and businesses can monitor wallets connecting to
-              their platform, detect risky users, and protect against fraud with
-              real-time alerts.
-            </p>
-            <div className="section-persona">
-              <span className="section-persona-tag bg-[#00BFFF]">
-                dApp Developer
-              </span>
-              <span className="section-persona-tag bg-[#E5E5E5]">Exchange</span>
-              <span className="section-persona-tag bg-[#E5E5E5]">Protocol</span>
-            </div>
-          </div>
-          <Badge className="neo-pill border-4 border-black bg-[#00FF00] font-black text-black uppercase shadow-[4px_4px_0_0_#000]">
-            {6} Tools
-          </Badge>
-        </div>
-
-        {/* Unified Tools Card */}
-        <Card className="neo-card border-black bg-white overflow-hidden">
-          {/* Shared Address Input */}
-          {activeToolTab !== "multi" && (
-            <div className="border-b-4 border-black bg-gray-50 p-4">
-              <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-                Target Wallet Address
-              </label>
-              <input
-                value={toolAddress}
-                onChange={(e) => setToolAddress(e.target.value)}
-                placeholder="Enter Neo N3 address..."
-                className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-              />
-            </div>
-          )}
-
-          {/* Tool Tabs */}
-          <div className="flex flex-wrap border-b-4 border-black bg-gray-100">
-            {[
-              {
-                id: "validity" as const,
-                label: "Validity Score",
-                icon: <ShieldCheck className="h-4 w-4" strokeWidth={3} />,
-              },
-              {
-                id: "counterparty" as const,
-                label: "Counterparty Risk",
-                icon: <Users className="h-4 w-4" strokeWidth={3} />,
-              },
-              {
-                id: "multi" as const,
-                label: "Multi-Wallet Diff",
-                icon: <GitCompare className="h-4 w-4" strokeWidth={3} />,
-              },
-              {
-                id: "monitor" as const,
-                label: "Schedule Monitor",
-                icon: <Clock className="h-4 w-4" strokeWidth={3} />,
-              },
-              {
-                id: "approvals" as const,
-                label: "Approval Scan",
-                icon: <Shield className="h-4 w-4" strokeWidth={3} />,
-              },
-              {
-                id: "report" as const,
-                label: "Generate Report",
-                icon: <FileText className="h-4 w-4" strokeWidth={3} />,
-              },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveToolTab(tab.id)}
-                className={`flex items-center gap-2 border-r-2 border-black px-4 py-3 text-xs font-black tracking-wide uppercase transition-colors ${
-                  activeToolTab === tab.id
-                    ? "bg-[#00FF00] text-black"
-                    : "bg-transparent text-black/70 hover:bg-black/10"
-                }`}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Tool Content */}
-          <CardContent className="p-6">
-            {/* Validity Score Tool */}
-            {activeToolTab === "validity" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#00FF00] p-3">
-                    <ShieldCheck
-                      className="h-6 w-6 text-black"
-                      strokeWidth={3}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Wallet Validity Score
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Compute a 0-100 risk score with detailed breakdown
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => void runValidityScore()}
-                  disabled={validityLoading || !toolAddress.trim()}
-                  className="neo-button border-4 border-black bg-[#00FF00] px-6 font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
-                >
-                  {validityLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Analyze"
-                  )}
-                </Button>
-
-                {validityError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {validityError}
-                  </p>
-                )}
-
-                {validityResult && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-white to-gray-50 p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Risk Score
-                      </p>
-                      <div className="mt-3 flex items-end gap-3">
-                        <span
-                          className={`text-5xl font-black ${validityResult.score >= 70 ? "text-[#00FF00]" : validityResult.score >= 40 ? "text-[#FFFF00]" : "text-[#FF0000]"}`}
-                        >
-                          {validityResult.score}
-                        </span>
-                        <span className="text-xl font-black text-black/40">
-                          /100
-                        </span>
-                      </div>
-                      <Badge
-                        className={`neo-pill mt-3 border-3 border-black font-black uppercase ${
-                          validityResult.risk_level === "clean"
-                            ? "bg-[#00FF00] text-black"
-                            : validityResult.risk_level === "low"
-                              ? "bg-[#90EE90] text-black"
-                              : validityResult.risk_level === "moderate"
-                                ? "bg-[#FFFF00] text-black"
-                                : "bg-[#FF0000] text-white"
-                        }`}
-                      >
-                        {validityResult.risk_level}
-                      </Badge>
-                    </div>
-                    <div className="neo-card border-4 border-black p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Address
-                      </p>
-                      <p className="mt-2 font-mono text-xs break-all">
-                        {validityResult.address}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Counterparty Risk Tool */}
-            {activeToolTab === "counterparty" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#FFFF00] p-3">
-                    <Users className="h-6 w-6 text-black" strokeWidth={3} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Counterparty Risk Analysis
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Identify risky counterparties with relationship analysis
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => void runCounterpartyRisk()}
-                  disabled={counterpartyLoading || !toolAddress.trim()}
-                  className="neo-button border-4 border-black bg-[#FFFF00] px-6 font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
-                >
-                  {counterpartyLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Analyze"
-                  )}
-                </Button>
-
-                {counterpartyError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {counterpartyError}
-                  </p>
-                )}
-
-                {counterpartyResult && (
-                  <div className="neo-card border-4 border-black p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                          {"//"} Analysis Complete
-                        </p>
-                        <p className="mt-2 font-mono text-xs break-all">
-                          {counterpartyResult.address}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-3xl font-black text-[#FF0000]">
-                          {counterpartyResult.flagged_count}
-                        </p>
-                        <p className="text-xs font-black text-black/60 uppercase">
-                          Flagged
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Multi-Wallet Diff Tool */}
-            {activeToolTab === "multi" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#00BFFF] p-3">
-                    <GitCompare
-                      className="h-6 w-6 text-black"
-                      strokeWidth={3}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Multi-Wallet Comparison
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Compare wallets for diversification and overlap analysis
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {multiWalletAddresses.map((addr, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input
-                        value={addr}
-                        onChange={(e) => {
-                          const newAddrs = [...multiWalletAddresses];
-                          newAddrs[idx] = e.target.value;
-                          setMultiWalletAddresses(newAddrs);
-                        }}
-                        placeholder={`Wallet ${idx + 1} address...`}
-                        className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                      />
-                      {multiWalletAddresses.length > 1 && (
-                        <Button
-                          onClick={() =>
-                            setMultiWalletAddresses(
-                              multiWalletAddresses.filter((_, i) => i !== idx),
-                            )
-                          }
-                          className="neo-button border-4 border-black bg-[#FF0000] px-3 text-white shadow-[4px_4px_0_0_#000]"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() =>
-                        setMultiWalletAddresses([...multiWalletAddresses, ""])
-                      }
-                      className="neo-button border-4 border-black bg-white px-4 font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Add Wallet
-                    </Button>
-                    <Button
-                      onClick={() => void runMultiWalletDiff()}
-                      disabled={
-                        multiWalletLoading ||
-                        multiWalletAddresses.filter((a) => a.trim()).length < 2
-                      }
-                      className="neo-button border-4 border-black bg-[#00BFFF] px-6 font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
-                    >
-                      {multiWalletLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        "Compare"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                {multiWalletError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {multiWalletError}
-                  </p>
-                )}
-
-                {multiWalletResult && (
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="neo-card border-4 border-black p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Combined Risk
-                      </p>
-                      <p className="mt-2 text-3xl font-black">
-                        {multiWalletResult.weighted_risk_score}
-                      </p>
-                    </div>
-                    <div className="neo-card border-4 border-black p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Diversification
-                      </p>
-                      <p className="mt-2 text-3xl font-black">
-                        {multiWalletResult.diversification_score}%
-                      </p>
-                    </div>
-                    <div className="neo-card border-4 border-black p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Wallets
-                      </p>
-                      <p className="mt-2 text-3xl font-black">
-                        {multiWalletResult.wallet_count}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Schedule Monitor Tool */}
-            {activeToolTab === "monitor" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#FF00FF] p-3">
-                    <Clock className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Schedule Monitoring
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Set up automated alerts for wallet changes
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex flex-wrap gap-4">
-                    <div>
-                      <label className="text-xs font-black tracking-wider uppercase">
-                        Interval (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        value={monitorInterval}
-                        onChange={(e) =>
-                          setMonitorInterval(parseInt(e.target.value) || 60)
-                        }
-                        min={1}
-                        max={1440}
-                        className="neo-input mt-1 w-32 border-4 border-black px-4 py-2 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs font-black tracking-wider uppercase">
-                        Alert Conditions
-                      </label>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {[
-                          "large_outflow",
-                          "new_token",
-                          "risk_score_jump",
-                          "suspicious_activity",
-                        ].map((cond) => (
-                          <button
-                            key={cond}
-                            onClick={() => {
-                              if (monitorConditions.includes(cond)) {
-                                setMonitorConditions(
-                                  monitorConditions.filter((c) => c !== cond),
-                                );
-                              } else {
-                                setMonitorConditions([
-                                  ...monitorConditions,
-                                  cond,
-                                ]);
-                              }
-                            }}
-                            className={`neo-pill border-3 border-black px-3 py-1 text-xs font-black uppercase ${
-                              monitorConditions.includes(cond)
-                                ? "bg-[#00FF00] text-black shadow-[3px_3px_0_0_#000]"
-                                : "bg-white text-black/50"
-                            }`}
-                          >
-                            {cond.replace(/_/g, " ")}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    onClick={() => void runScheduleMonitor()}
-                    disabled={monitorLoading || !toolAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#FF00FF] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
-                  >
-                    {monitorLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Schedule Monitor"
-                    )}
-                  </Button>
-                </div>
-
-                {monitorError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {monitorError}
-                  </p>
-                )}
-
-                {monitorResult && (
-                  <div className="neo-card border-4 border-black bg-[#E8F5E9] p-5">
-                    <div className="flex items-center gap-3">
-                      <Badge className="neo-pill border-3 border-black bg-[#00FF00] font-black text-black uppercase">
-                        {monitorResult.scheduled ? "Scheduled" : "Failed"}
-                      </Badge>
-                      <p className="font-mono text-xs">
-                        {monitorResult.address}
-                      </p>
-                    </div>
-                    <p className="mt-2 text-sm font-bold">
-                      Checking every {monitorResult.interval_minutes} minutes
-                      for: {monitorResult.conditions.join(", ")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Approval Scan Tool */}
-            {activeToolTab === "approvals" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#FF6600] p-3">
-                    <Shield className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Token Approval Scan
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Scan for risky token approvals and unlimited allowances
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => void runApprovalScan()}
-                  disabled={approvalLoading || !toolAddress.trim()}
-                  className="neo-button border-4 border-black bg-[#FF6600] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
-                >
-                  {approvalLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Scan"
-                  )}
-                </Button>
-
-                {approvalError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {approvalError}
-                  </p>
-                )}
-
-                {approvalResult && (
-                  <div className="neo-card border-4 border-black p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                          {"//"} Scan Complete
-                        </p>
-                        <p className="mt-2 text-sm font-bold">
-                          {approvalResult.approvals.length === 0
-                            ? "No token approvals found"
-                            : `${approvalResult.approvals.length} approvals found`}
-                        </p>
-                      </div>
-                      <Badge
-                        className={`neo-pill border-3 border-black font-black uppercase ${
-                          approvalResult.flags.length === 0
-                            ? "bg-[#00FF00] text-black"
-                            : "bg-[#FF0000] text-white"
-                        }`}
-                      >
-                        {approvalResult.flags.length === 0
-                          ? "Clean"
-                          : `${approvalResult.flags.length} Flags`}
-                      </Badge>
-                    </div>
-                    {approvalResult.flags.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        {approvalResult.flags.map((flag, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 text-sm font-bold text-[#FF0000]"
-                          >
-                            <AlertTriangle className="h-4 w-4" />
-                            {flag}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Generate Report Tool */}
-            {activeToolTab === "report" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="border-4 border-black bg-[#9C27B0] p-3">
-                    <FileText className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase">
-                      Generate Action Report
-                    </h3>
-                    <p className="text-sm text-black/70">
-                      Create formatted security reports for different channels
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-2 block text-xs font-black tracking-wider text-black/60 uppercase">
-                      Output Channel
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {(["console", "dm", "email", "tweet", "alert"] as const).map((channel) => (
-                        <button
-                          key={channel}
-                          onClick={() => setReportChannel(channel)}
-                          className={`neo-pill border-3 border-black px-4 py-2 text-sm font-black uppercase ${
-                            reportChannel === channel
-                              ? "bg-[#9C27B0] text-white shadow-[3px_3px_0_0_#000]"
-                              : "bg-white text-black/50"
-                          }`}
-                        >
-                          {channel}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="neo-card border-4 border-black bg-gray-50 p-4">
-                    <p className="text-xs font-black tracking-wider text-black/60 uppercase">
-                      Source Data
-                    </p>
-                    {validityResult ? (
-                      <div className="mt-2">
-                        <p className="font-mono text-sm">{validityResult.address}</p>
-                        <div className="mt-1 flex gap-2">
-                          <Badge className={`neo-pill border-2 border-black text-xs font-black ${
-                            validityResult.risk_level === "clean" || validityResult.risk_level === "low"
-                              ? "bg-[#00FF00] text-black"
-                              : validityResult.risk_level === "moderate"
-                                ? "bg-[#FFFF00] text-black"
-                                : "bg-[#FF0000] text-white"
-                          }`}>
-                            {validityResult.risk_level}
-                          </Badge>
-                          <Badge className="neo-pill border-2 border-black bg-white text-xs font-black text-black">
-                            Score: {validityResult.score}
-                          </Badge>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-black/50">
-                        Run a Validity Score analysis first, or enter an address in the shared input above
-                      </p>
-                    )}
-                  </div>
-
-                  <Button
-                    onClick={() => void runGenerateReport()}
-                    disabled={reportLoading || (!toolAddress.trim() && !validityResult)}
-                    className="neo-button border-4 border-black bg-[#9C27B0] px-6 font-black text-white uppercase shadow-[4px_4px_0_0_#000]"
-                  >
-                    {reportLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Generate Report"
-                    )}
-                  </Button>
-                </div>
-
-                {reportError && (
-                  <p className="text-sm font-black text-[#FF0000] uppercase">
-                    {reportError}
-                  </p>
-                )}
-
-                {reportResult && (
-                  <div className="space-y-4">
-                    {/* Report Header */}
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-5 text-white">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-black tracking-widest text-[#9C27B0] uppercase">
-                            {"//"} Generated Report
-                          </p>
-                          <div className="mt-2 flex gap-2">
-                            <Badge className="neo-pill border-2 border-white/30 bg-[#9C27B0] text-xs font-black text-white uppercase">
-                              {reportResult.channel}
-                            </Badge>
-                            <Badge className={`neo-pill border-2 border-white/30 text-xs font-black uppercase ${
-                              reportResult.risk_level === "clean" || reportResult.risk_level === "low"
-                                ? "bg-[#00FF00] text-black"
-                                : reportResult.risk_level === "moderate"
-                                  ? "bg-[#FFFF00] text-black"
-                                  : "bg-[#FF0000] text-white"
-                            }`}>
-                              {reportResult.risk_level}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={() => void copyReport()}
-                          className="neo-button border-2 border-white/30 bg-white/10 px-3 py-2 text-white hover:bg-white/20"
-                        >
-                          {reportCopied ? (
-                            <Check className="h-4 w-4 text-[#00FF00]" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Report Content */}
-                    <div className="neo-card border-4 border-black bg-white p-5">
-                      <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                        {"//"} Message Content
-                      </p>
-                      <div className="mt-3 whitespace-pre-wrap rounded border-2 border-black/20 bg-gray-50 p-4 font-mono text-sm">
-                        {reportResult.message}
-                      </div>
-                    </div>
-
-                    {/* Recommended Actions */}
-                    {reportResult.actions.length > 0 && (
-                      <div className="neo-card border-4 border-black bg-[#E3F2FD] p-5">
-                        <p className="text-xs font-black tracking-widest text-black/60 uppercase">
-                          {"//"} Recommended Actions
-                        </p>
-                        <ul className="mt-3 space-y-2">
-                          {reportResult.actions.map((action, idx) => (
-                            <li
-                              key={idx}
-                              className="flex items-start gap-2 text-sm font-medium"
-                            >
-                              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center bg-black text-xs font-black text-white">
-                                {idx + 1}
-                              </span>
-                              {action}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-black/50">
-                      Generated at {new Date(reportResult.generated_at).toLocaleString()}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* COMMAND CENTER - Stats & Monitoring Dashboard */}
         <div id="ui" className="mt-8 grid gap-8 lg:grid-cols-4">
           <div className="space-y-8 lg:col-span-3">
@@ -2742,32 +1979,6 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        {/* Voice Alert Button */}
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            const severityMap: Record<string, "info" | "warning" | "critical" | "emergency"> = {
-                              low: "info",
-                              medium: "warning",
-                              high: "critical",
-                              critical: "emergency",
-                            };
-                            voice.speakAlert(
-                              `${alert.title}. ${alert.description}. Recommended action: ${alert.action}`,
-                              severityMap[alert.severity] ?? "warning",
-                              alert.walletAddress
-                            );
-                          }}
-                          disabled={!voice.config.enabled || voice.isSpeaking}
-                          className={`neo-button border-4 border-black px-4 font-black tracking-wider uppercase shadow-[4px_4px_0_0_#000] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000] ${
-                            voice.config.enabled 
-                              ? "bg-[#00FF00] text-black" 
-                              : "bg-gray-300 text-black/50"
-                          }`}
-                          title={voice.config.enabled ? "Listen to this alert" : "Enable voice to listen"}
-                        >
-                          <Volume2 className="h-4 w-4" strokeWidth={3} />
-                        </Button>
                         {alert.explorerUrl && (
                           <Button
                             size="sm"

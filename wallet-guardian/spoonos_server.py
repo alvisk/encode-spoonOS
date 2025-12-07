@@ -165,31 +165,67 @@ async def analyze_wallet_free(prompt: str, use_mock: bool = False):
 
 async def stream_agent_response(prompt: str) -> AsyncGenerator[str, None]:
     """
-    Stream the agent response token by token.
+    Stream the agent response with progress updates.
     Yields Server-Sent Events (SSE) formatted data.
     
     Note: Since the underlying SDK doesn't support true token streaming,
-    we run the agent to completion and then stream the result word by word
-    for a better user experience.
+    we run the agent to completion while sending keepalive/progress messages,
+    then stream the result word by word for a better user experience.
     """
     try:
         agent = await wallet_guardian_agent_factory(AGENT_NAME)
         
         # Send initial status
         yield "data: Analyzing wallet...\n\n"
-        await asyncio.sleep(0.1)
         
-        # Run the agent to completion
-        result = await agent.run(prompt)
+        # Run agent in background task so we can send keepalives
+        result_holder = {"result": None, "error": None, "done": False}
+        
+        async def run_agent():
+            try:
+                result_holder["result"] = await agent.run(prompt)
+            except Exception as e:
+                result_holder["error"] = e
+            finally:
+                result_holder["done"] = True
+        
+        # Start the agent task
+        agent_task = asyncio.create_task(run_agent())
+        
+        # Send keepalive pings every 5 seconds while waiting
+        progress_messages = [
+            "Fetching blockchain data...",
+            "Analyzing transactions...",
+            "Computing risk score...",
+            "Generating report...",
+        ]
+        msg_index = 0
+        
+        while not result_holder["done"]:
+            await asyncio.sleep(5)
+            if not result_holder["done"]:
+                # Send progress update to keep connection alive
+                msg = progress_messages[msg_index % len(progress_messages)]
+                yield f"data: {msg}\n\n"
+                msg_index += 1
+        
+        # Wait for task to fully complete
+        await agent_task
+        
+        # Check for errors
+        if result_holder["error"]:
+            raise result_holder["error"]
+        
+        result = result_holder["result"]
         
         # Reset agent state
         agent.current_step = 0
         if hasattr(agent, 'memory') and hasattr(agent.memory, 'clear'):
             agent.memory.clear()
         
-        # Clear the initial message and stream the actual result
+        # Clear the progress messages and stream the actual result
         yield "data: [CLEAR]\n\n"
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.02)
         
         # Stream the result word by word for a typing effect
         if result:
@@ -200,7 +236,7 @@ async def stream_agent_response(prompt: str) -> AsyncGenerator[str, None]:
                     yield f"data:  \n\n"
                 yield f"data: {word}\n\n"
                 # Small delay between words for typing effect
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(0.01)
         
         # Send done event
         yield "data: [DONE]\n\n"

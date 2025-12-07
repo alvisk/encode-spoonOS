@@ -160,11 +160,15 @@ export function WalletToolsDashboard() {
       const err = (await res.json().catch(() => ({}))) as { detail?: string };
       throw new Error(err.detail ?? "SpoonOS call failed");
     }
-    const data = (await res.json()) as { result: string };
-    return data.result;
+    const data = (await res.json()) as { result?: string; response?: string };
+    // API may return 'response' or 'result' field depending on endpoint
+    return data.response ?? data.result ?? "";
   };
 
-  const extractActions = (text: string): string[] => {
+  const extractActions = (text: string | undefined | null): string[] => {
+    if (!text) {
+      return ["Review wallet activity", "Monitor for changes"];
+    }
     const actions: string[] = [];
     const lines = text.split("\n");
     for (const line of lines) {
@@ -172,7 +176,7 @@ export function WalletToolsDashboard() {
         actions.push(line.replace(/^[-•*\d.]\s+/, "").trim());
       }
     }
-    return actions.slice(0, 5);
+    return actions.length > 0 ? actions.slice(0, 5) : ["Review wallet activity", "Monitor for changes"];
   };
 
   const runValidityScore = async () => {
@@ -307,10 +311,11 @@ export function WalletToolsDashboard() {
       const result = await invokeSpoonTool(
         `draft action message for wallet ${targetAddress} with risk level ${riskLevel} and flags ${riskFlags.join(", ")} for ${reportChannel} channel`
       );
+      const message = result ?? "Unable to generate report. Please try again.";
       setReportResult({
         channel: reportChannel,
-        message: result,
-        actions: extractActions(result),
+        message: message,
+        actions: extractActions(message),
         risk_level: riskLevel,
         generated_at: new Date().toISOString(),
       });
