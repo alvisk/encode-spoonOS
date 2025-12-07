@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd wallet-guardian-web && pnpm install && pnpm build",
+  "outputDirectory": "wallet-guardian-web/.next",
+  "installCommand": "pnpm install",
+  "framework": "nextjs"
+}

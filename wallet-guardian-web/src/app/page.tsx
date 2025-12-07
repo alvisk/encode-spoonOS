@@ -126,7 +126,34 @@ type ApprovalScanResult = {
   flags: string[];
 };
 
-// Malicious Contract Detector Tool Response
+// Malicious Contract Detector Tool Response (raw from API)
+type MaliciousContractApiResponse = {
+  contract_address: string;
+  chain: string;
+  contract_name?: string;
+  is_verified?: boolean;
+  verdict?: {
+    is_malicious: boolean | null;
+    risk_score: number;
+    risk_level: string;
+    confidence?: number;
+  };
+  // Flat structure (fallback/parsed)
+  is_malicious?: boolean;
+  risk_score?: number;
+  risk_level?: string;
+  detected_issues: Array<{
+    type?: string;
+    category?: string;
+    severity: string;
+    description?: string;
+    explanation?: string;
+  }>;
+  summary: string;
+  verified?: boolean;
+};
+
+// Normalized result for UI
 type MaliciousContractResult = {
   contract_address: string;
   chain: string;
@@ -826,8 +853,26 @@ export default function HomePage() {
         throw new Error(err.detail ?? "Contract scan failed");
       }
       
-      const data = (await res.json()) as MaliciousContractResult;
-      setContractResult(data);
+      const apiData = (await res.json()) as MaliciousContractApiResponse;
+      
+      // Normalize the API response - extract from verdict if nested
+      const normalized: MaliciousContractResult = {
+        contract_address: apiData.contract_address,
+        chain: apiData.chain,
+        contract_name: apiData.contract_name,
+        is_malicious: apiData.verdict?.is_malicious ?? apiData.is_malicious ?? false,
+        risk_score: apiData.verdict?.risk_score ?? apiData.risk_score ?? 0,
+        risk_level: apiData.verdict?.risk_level ?? apiData.risk_level ?? "unknown",
+        verified: apiData.is_verified ?? apiData.verified ?? false,
+        summary: apiData.summary,
+        detected_issues: apiData.detected_issues.map((issue) => ({
+          type: issue.type ?? issue.category ?? "unknown",
+          severity: issue.severity,
+          description: issue.description ?? issue.explanation ?? "No description available",
+        })),
+      };
+      
+      setContractResult(normalized);
     } catch (err) {
       // Fallback to SpoonOS natural language if direct endpoint fails
       try {
