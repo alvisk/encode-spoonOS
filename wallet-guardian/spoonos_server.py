@@ -16,8 +16,10 @@ import os
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv(override=True)
@@ -155,6 +157,102 @@ async def analyze_wallet_free(prompt: str, use_mock: bool = False):
     finally:
         if "WALLET_GUARDIAN_USE_MOCK" in os.environ:
             del os.environ["WALLET_GUARDIAN_USE_MOCK"]
+
+
+# =============================================================================
+# Contract Scan Endpoints (for Neo Oracle)
+# =============================================================================
+
+class ContractScanRequest(BaseModel):
+    """Request for contract scanning."""
+    contract_address: str
+    chain: str = "ethereum"
+    force_refresh: bool = False
+    use_ai: bool = True
+
+
+@app.get("/api/v2/contract-scan/{address}")
+async def scan_contract_for_malicious_patterns(
+    address: str,
+    chain: str = "ethereum",
+    format: str = "json",
+    force_refresh: bool = False,
+    use_ai: bool = True,
+):
+    """
+    Scan an Ethereum smart contract for malicious patterns.
+    
+    This endpoint is designed to be called by the Neo Oracle to analyze
+    Ethereum contracts for security issues.
+    
+    Args:
+        address: Ethereum contract address (0x...)
+        chain: Chain to scan - "ethereum" (mainnet) or "sepolia" (testnet)
+        format: Response format - "json" for full response, "oracle" for Neo Oracle compact format
+        force_refresh: Bypass cache and force fresh analysis
+        use_ai: Use AI for deep analysis (slower but more thorough)
+    """
+    try:
+        from src.tools.malicious_contract_detector import (
+            MaliciousContractDetectorTool,
+            format_for_oracle,
+        )
+        
+        detector = MaliciousContractDetectorTool()
+        result = detector.call(
+            contract_address=address,
+            chain=chain,
+            force_refresh=force_refresh,
+            use_ai=use_ai,
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        if format.lower() == "oracle":
+            oracle_response = format_for_oracle(result)
+            return JSONResponse(content={
+                "oracle_response": oracle_response,
+                "address": address,
+            })
+        else:
+            return JSONResponse(content=result)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v2/contract-scan")
+async def scan_contract_post(request: ContractScanRequest):
+    """POST version of contract scan."""
+    return await scan_contract_for_malicious_patterns(
+        address=request.contract_address,
+        chain=request.chain,
+        force_refresh=request.force_refresh,
+        use_ai=request.use_ai,
+    )
+
+
+@app.get("/api/v2/contract-scan/known-malicious")
+async def list_known_malicious_contracts():
+    """List all known malicious contracts in the database."""
+    try:
+        from src.tools.known_malicious_contracts import KNOWN_MALICIOUS_CONTRACTS
+        return JSONResponse(content={
+            "count": len(KNOWN_MALICIOUS_CONTRACTS),
+            "contracts": [
+                {
+                    "address": addr,
+                    "name": info.get("name"),
+                    "category": info.get("category"),
+                }
+                for addr, info in KNOWN_MALICIOUS_CONTRACTS.items()
+            ]
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
