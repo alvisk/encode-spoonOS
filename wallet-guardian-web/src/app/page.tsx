@@ -175,6 +175,13 @@ const DEFAULT_WALLET: Wallet = {
   tags: [],
 };
 
+// Helper to detect chain from address
+const detectChainFromAddress = (address: string): string => {
+  if (address.startsWith("0x") && address.length === 42) return "Ethereum";
+  if (address.startsWith("N") && address.length === 34) return "Neo N3";
+  return "Unknown";
+};
+
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
   const activities = mockActivityByAddress[primaryWallet.address] ?? [];
@@ -194,26 +201,26 @@ export default function HomePage() {
   // Tool-specific state
   const [activeToolTab, setActiveToolTab] = useState<"validity" | "counterparty" | "multi" | "monitor" | "approvals">("validity");
   
+  // Shared address for single-wallet tools
+  const [toolAddress, setToolAddress] = useState("");
+  
   // Validity Score Tool
-  const [validityAddress, setValidityAddress] = useState("");
   const [validityLoading, setValidityLoading] = useState(false);
   const [validityResult, setValidityResult] = useState<ValidityScoreResult | null>(null);
   const [validityError, setValidityError] = useState<string | null>(null);
   
   // Counterparty Risk Tool
-  const [counterpartyAddress, setCounterpartyAddress] = useState("");
   const [counterpartyLoading, setCounterpartyLoading] = useState(false);
   const [counterpartyResult, setCounterpartyResult] = useState<CounterpartyRiskResult | null>(null);
   const [counterpartyError, setCounterpartyError] = useState<string | null>(null);
   
-  // Multi-Wallet Diff Tool
+  // Multi-Wallet Diff Tool (uses its own addresses array)
   const [multiWalletAddresses, setMultiWalletAddresses] = useState<string[]>([""]);
   const [multiWalletLoading, setMultiWalletLoading] = useState(false);
   const [multiWalletResult, setMultiWalletResult] = useState<MultiWalletDiffResult | null>(null);
   const [multiWalletError, setMultiWalletError] = useState<string | null>(null);
   
   // Schedule Monitor Tool
-  const [monitorAddress, setMonitorAddress] = useState("");
   const [monitorInterval, setMonitorInterval] = useState(60);
   const [monitorConditions, setMonitorConditions] = useState<string[]>(["large_outflow", "risk_score_jump"]);
   const [monitorLoading, setMonitorLoading] = useState(false);
@@ -221,7 +228,6 @@ export default function HomePage() {
   const [monitorError, setMonitorError] = useState<string | null>(null);
   
   // Approval Scan Tool
-  const [approvalAddress, setApprovalAddress] = useState("");
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalResult, setApprovalResult] = useState<ApprovalScanResult | null>(null);
   const [approvalError, setApprovalError] = useState<string | null>(null);
@@ -385,12 +391,15 @@ export default function HomePage() {
         setScanWallet(walletData);
       } else {
         // Create a minimal wallet object from the address
+        // Detect chain from address format
+        const addr = scanAddress.trim();
+        const detectedChain = addr.startsWith("0x") ? "Ethereum" : "Neo N3";
         setScanWallet({
-          address: scanAddress.trim(),
+          address: addr,
           label: "Scanned Wallet",
           balanceUSD: 0,
           riskScore: 50,
-          chains: ["Neo N3"],
+          chains: [detectedChain],
           lastActive: new Date().toISOString(),
           tags: [],
         });
@@ -425,17 +434,17 @@ export default function HomePage() {
 
   // Validity Score Tool
   const runValidityScore = async () => {
-    if (!validityAddress.trim()) return;
+    if (!toolAddress.trim()) return;
     setValidityLoading(true);
     setValidityError(null);
     setValidityResult(null);
     try {
-      const result = await invokeSpoonTool(`get validity score for wallet ${validityAddress.trim()}`);
+      const result = await invokeSpoonTool(`get validity score for wallet ${toolAddress.trim()}`);
       // Parse the result - SpoonOS returns text, we'll extract key info
       const scoreMatch = /score[:\s]+(\d+)/i.exec(result);
       const riskMatch = /risk[_\s]?level[:\s]+(\w+)/i.exec(result);
       setValidityResult({
-        address: validityAddress.trim(),
+        address: toolAddress.trim(),
         score: scoreMatch?.[1] ? parseInt(scoreMatch[1]) : 50,
         risk_level: riskMatch?.[1] ?? "moderate",
         deductions: {},
@@ -452,16 +461,16 @@ export default function HomePage() {
 
   // Counterparty Risk Tool
   const runCounterpartyRisk = async () => {
-    if (!counterpartyAddress.trim()) return;
+    if (!toolAddress.trim()) return;
     setCounterpartyLoading(true);
     setCounterpartyError(null);
     setCounterpartyResult(null);
     try {
-      const result = await invokeSpoonTool(`analyze counterparty risk for wallet ${counterpartyAddress.trim()}`);
+      const result = await invokeSpoonTool(`analyze counterparty risk for wallet ${toolAddress.trim()}`);
       // Parse counterparty info from result
       const flaggedMatch = /(\d+)\s*flagged/i.exec(result);
       setCounterpartyResult({
-        address: counterpartyAddress.trim(),
+        address: toolAddress.trim(),
         results: {},
         total_counterparties: 0,
         flagged_count: flaggedMatch?.[1] ? parseInt(flaggedMatch[1]) : 0,
@@ -506,20 +515,20 @@ export default function HomePage() {
 
   // Schedule Monitor Tool
   const runScheduleMonitor = async () => {
-    if (!monitorAddress.trim()) return;
+    if (!toolAddress.trim()) return;
     setMonitorLoading(true);
     setMonitorError(null);
     setMonitorResult(null);
     try {
       const result = await invokeSpoonTool(
-        `schedule monitoring for wallet ${monitorAddress.trim()} every ${monitorInterval} minutes with conditions ${monitorConditions.join(", ")}`
+        `schedule monitoring for wallet ${toolAddress.trim()} every ${monitorInterval} minutes with conditions ${monitorConditions.join(", ")}`
       );
       setMonitorResult({
         scheduled: result.toLowerCase().includes("scheduled") || result.toLowerCase().includes("success"),
-        address: monitorAddress.trim(),
+        address: toolAddress.trim(),
         interval_minutes: monitorInterval,
         conditions: monitorConditions,
-        monitored_wallets: [monitorAddress.trim()],
+        monitored_wallets: [toolAddress.trim()],
       });
     } catch (err) {
       setMonitorError(err instanceof Error ? err.message : "Failed to schedule monitor");
@@ -530,12 +539,12 @@ export default function HomePage() {
 
   // Approval Scan Tool
   const runApprovalScan = async () => {
-    if (!approvalAddress.trim()) return;
+    if (!toolAddress.trim()) return;
     setApprovalLoading(true);
     setApprovalError(null);
     setApprovalResult(null);
     try {
-      const result = await invokeSpoonTool(`scan token approvals for wallet ${approvalAddress.trim()}`);
+      const result = await invokeSpoonTool(`scan token approvals for wallet ${toolAddress.trim()}`);
       setApprovalResult({
         approvals: [],
         flags: result.toLowerCase().includes("no approvals") ? [] : ["Check approval history"],
@@ -559,7 +568,7 @@ export default function HomePage() {
               </h1>
               <div className="mt-4 h-2 w-32 bg-black" />
               <p className="mt-6 max-w-2xl text-lg font-bold text-black uppercase tracking-wide">
-                Industrial-grade Neo N3 wallet security. Monitor. Detect. Assert.
+                Industrial-grade multi-chain wallet security. Monitor. Detect. Assert.
               </p>
               <p className="mt-2 max-w-2xl text-sm font-medium text-black/70">
                 A SpoonOS agent that analyzes wallets, surfaces risks, and generates actionable alerts.
@@ -606,7 +615,7 @@ export default function HomePage() {
                 Wallet Scanner
               </CardTitle>
               <CardDescription className="text-black/70 font-medium mt-1">
-                Input a Neo N3 address for instant security analysis.
+                Input a Neo N3 or Ethereum address for instant security analysis.
               </CardDescription>
             </div>
             <Badge className="neo-pill bg-[#FFFF00] text-black border-4 border-black shadow-[6px_6px_0_0_#000] font-black uppercase">Beta</Badge>
@@ -624,7 +633,7 @@ export default function HomePage() {
                   id="scan"
                   value={scanAddress}
                   onChange={(e) => setScanAddress(e.target.value)}
-                  placeholder="Enter Neo N3 address..."
+                  placeholder="Enter Neo N3 (N...) or Ethereum (0x...) address..."
                   className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[6px_6px_0_0_#000] focus:outline-none focus:shadow-[4px_4px_0_0_#000] focus:translate-x-0.5 focus:translate-y-0.5 transition-none"
                 />
                 <Button
@@ -924,6 +933,19 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
           </Badge>
         </div>
 
+        {/* Shared Address Input */}
+        {activeToolTab !== "multi" && (
+          <div className="neo-card border-4 border-black p-4 bg-gray-50">
+            <label className="text-xs font-black uppercase tracking-wider text-black/60 mb-2 block">Target Wallet Address</label>
+            <input
+              value={toolAddress}
+              onChange={(e) => setToolAddress(e.target.value)}
+              placeholder="Enter Neo N3 address..."
+              className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
+            />
+          </div>
+        )}
+
         {/* Tool Tabs */}
         <div className="flex flex-wrap gap-2">
           {[
@@ -936,10 +958,10 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
             <button
               key={tab.id}
               onClick={() => setActiveToolTab(tab.id)}
-              className={`neo-button flex items-center gap-2 border-4 border-black px-4 py-2 font-black uppercase text-sm tracking-wide transition-none ${
+              className={`flex items-center gap-2 border-4 border-black px-4 py-2 font-black uppercase text-sm tracking-wide shadow-[4px_4px_0_0_#000] ${
                 activeToolTab === tab.id
-                  ? "bg-black text-[#FFFF00] shadow-none translate-x-1 translate-y-1"
-                  : "bg-white text-black shadow-[4px_4px_0_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000]"
+                  ? "bg-black text-[#FFFF00]"
+                  : "bg-white text-black hover:bg-gray-100 active:bg-gray-200"
               }`}
             >
               {tab.icon}
@@ -964,21 +986,13 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   </div>
                 </div>
                 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    value={validityAddress}
-                    onChange={(e) => setValidityAddress(e.target.value)}
-                    placeholder="Enter Neo N3 address..."
-                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                  />
-                  <Button
-                    onClick={() => void runValidityScore()}
-                    disabled={validityLoading || !validityAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#00FF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
-                  >
-                    {validityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => void runValidityScore()}
+                  disabled={validityLoading || !toolAddress.trim()}
+                  className="neo-button border-4 border-black bg-[#00FF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                >
+                  {validityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
+                </Button>
 
                 {validityError && (
                   <p className="text-sm font-black text-[#FF0000] uppercase">{validityError}</p>
@@ -1025,21 +1039,13 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   </div>
                 </div>
                 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    value={counterpartyAddress}
-                    onChange={(e) => setCounterpartyAddress(e.target.value)}
-                    placeholder="Enter Neo N3 address..."
-                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                  />
-                  <Button
-                    onClick={() => void runCounterpartyRisk()}
-                    disabled={counterpartyLoading || !counterpartyAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#FFFF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
-                  >
-                    {counterpartyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => void runCounterpartyRisk()}
+                  disabled={counterpartyLoading || !toolAddress.trim()}
+                  className="neo-button border-4 border-black bg-[#FFFF00] text-black shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                >
+                  {counterpartyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Analyze"}
+                </Button>
 
                 {counterpartyError && (
                   <p className="text-sm font-black text-[#FF0000] uppercase">{counterpartyError}</p>
@@ -1152,15 +1158,6 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <input
-                      value={monitorAddress}
-                      onChange={(e) => setMonitorAddress(e.target.value)}
-                      placeholder="Enter Neo N3 address to monitor..."
-                      className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                    />
-                  </div>
-                  
                   <div className="flex flex-wrap gap-4">
                     <div>
                       <label className="text-xs font-black uppercase tracking-wider">Interval (minutes)</label>
@@ -1201,7 +1198,7 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   
                   <Button
                     onClick={() => void runScheduleMonitor()}
-                    disabled={monitorLoading || !monitorAddress.trim()}
+                    disabled={monitorLoading || !toolAddress.trim()}
                     className="neo-button border-4 border-black bg-[#FF00FF] text-white shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
                   >
                     {monitorLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Schedule Monitor"}
@@ -1241,21 +1238,13 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   </div>
                 </div>
                 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    value={approvalAddress}
-                    onChange={(e) => setApprovalAddress(e.target.value)}
-                    placeholder="Enter Neo N3 address..."
-                    className="neo-input flex-1 border-4 border-black px-4 py-3 font-mono text-sm shadow-[4px_4px_0_0_#000]"
-                  />
-                  <Button
-                    onClick={() => void runApprovalScan()}
-                    disabled={approvalLoading || !approvalAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#FF6600] text-white shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
-                  >
-                    {approvalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Scan"}
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => void runApprovalScan()}
+                  disabled={approvalLoading || !toolAddress.trim()}
+                  className="neo-button border-4 border-black bg-[#FF6600] text-white shadow-[4px_4px_0_0_#000] font-black uppercase px-6"
+                >
+                  {approvalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Scan"}
+                </Button>
 
                 {approvalError && (
                   <p className="text-sm font-black text-[#FF0000] uppercase">{approvalError}</p>
