@@ -42,15 +42,19 @@ from src.agent import build_agent, AGENT_NAME, get_tools, register_agent
 # Cache the agent instance
 _agent_cache = {}
 
+# Accept both names for backwards compatibility
+ACCEPTED_AGENT_NAMES = {"wallet-guardian", "assertion-os", AGENT_NAME}
+
 async def wallet_guardian_agent_factory(agent_name: str):
     """Factory function that returns our Wallet Guardian agent."""
-    if agent_name != AGENT_NAME:
-        raise ValueError(f"Unknown agent: {agent_name}. Available: {AGENT_NAME}")
+    if agent_name not in ACCEPTED_AGENT_NAMES:
+        raise ValueError(f"Unknown agent: {agent_name}. Available: {list(ACCEPTED_AGENT_NAMES)}")
     
-    if agent_name not in _agent_cache:
-        _agent_cache[agent_name] = build_agent()
+    # Use canonical name for caching
+    if AGENT_NAME not in _agent_cache:
+        _agent_cache[AGENT_NAME] = build_agent()
     
-    return _agent_cache[agent_name]
+    return _agent_cache[AGENT_NAME]
 
 
 # =============================================================================

@@ -489,22 +489,16 @@ export default function HomePage() {
             console.log("[x402] No payment header, initial request");
           }
 
-          console.log(
-            "[x402] Making request to:",
-            `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
-          );
+          console.log("[x402] Making request via proxy: /api/spoonos");
 
-          const spoonRes = await fetch(
-            `${SPOONOS_API_URL}/x402/invoke/wallet-guardian`,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                prompt: `analyze wallet ${scanAddress.trim()}`,
-              }),
-              signal: abortControllerRef.current.signal,
-            },
-          );
+          const spoonRes = await fetch("/api/spoonos", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              prompt: `analyze wallet ${scanAddress.trim()}`,
+            }),
+            signal: abortControllerRef.current.signal,
+          });
 
           console.log("[x402] Response status:", spoonRes.status);
 
