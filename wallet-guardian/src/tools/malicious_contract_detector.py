@@ -164,7 +164,7 @@ class MaliciousContractDetectorTool(BaseTool):
     }
     
     # Default to Sepolia for testnet compatibility with Neo Oracle
-    DEFAULT_CHAIN = Chain.ETHEREUM_SEPOLIA
+    DEFAULT_CHAIN: ClassVar[Chain] = Chain.ETHEREUM_SEPOLIA
     
     def __init__(self, chain: Chain = None):
         """Initialize the detector with optional chain."""

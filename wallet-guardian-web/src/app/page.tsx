@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   BellRing,
@@ -212,6 +212,9 @@ export default function HomePage() {
   const [scanWallet, setScanWallet] = useState<Wallet | null>(null);
   const [scanActivity, setScanActivity] = useState<Activity[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<SpoonOSAnalysis | null>(null);
+  const [streamedText, setStreamedText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const streamingRef = useRef<boolean>(false);
   const [usePaywalled, setUsePaywalled] = useState(true); // Default to x402 paywalled endpoint
   const [x402Requirements, setX402Requirements] =
     useState<X402Requirements | null>(null);
@@ -273,6 +276,40 @@ export default function HomePage() {
     [scanWallet],
   );
 
+  // Streaming text animation effect
+  const streamText = useCallback((text: string) => {
+    setStreamedText("");
+    setIsStreaming(true);
+    streamingRef.current = true;
+
+    let currentIndex = 0;
+    const charsPerTick = 3; // Characters to add per tick for faster streaming
+    const tickInterval = 15; // Milliseconds between ticks
+
+    const tick = () => {
+      if (!streamingRef.current) return;
+
+      if (currentIndex < text.length) {
+        const nextIndex = Math.min(currentIndex + charsPerTick, text.length);
+        setStreamedText(text.slice(0, nextIndex));
+        currentIndex = nextIndex;
+        setTimeout(tick, tickInterval);
+      } else {
+        setIsStreaming(false);
+        streamingRef.current = false;
+      }
+    };
+
+    tick();
+  }, []);
+
+  // Stop streaming when component unmounts or new scan starts
+  useEffect(() => {
+    return () => {
+      streamingRef.current = false;
+    };
+  }, []);
+
   // Connect to NeoLine dAPI once the provider signals READY.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -330,6 +367,8 @@ export default function HomePage() {
     setScanStatus("loading");
     setScanError(null);
     setAiAnalysis(null);
+    setStreamedText("");
+    streamingRef.current = false; // Stop any existing streaming
 
     // Use override payment header if provided, otherwise use state
     const effectivePaymentHeader: string =
@@ -427,6 +466,10 @@ export default function HomePage() {
 
       const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
       setAiAnalysis(spoonData);
+      // Start streaming the text
+      if (spoonData.result) {
+        streamText(spoonData.result);
+      }
 
       // Also fetch local wallet data for display
       const encoded = encodeURIComponent(scanAddress.trim());
@@ -849,6 +892,33 @@ export default function HomePage() {
                 />
               )}
 
+              {/* Loading State - Show while scanning */}
+              {scanStatus === "loading" && (
+                <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                      <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                        {"//"} ANALYZING WALLET
+                      </p>
+                      <p className="font-mono text-xs text-white/60">
+                        SpoonOS Agent Processing...
+                      </p>
+                    </div>
+                    <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
+                      Scanning
+                    </Badge>
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    <div className="h-3 bg-white/10 rounded animate-pulse" />
+                    <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
+                    <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
+                  </div>
+                </div>
+              )}
+
               {scanWallet ? (
                 <>
                   {/* AI ANALYSIS CARD - SpoonOS Response */}
@@ -866,13 +936,16 @@ export default function HomePage() {
                             Agent: wallet-guardian
                           </p>
                         </div>
-                        <Badge className="neo-pill ml-auto border-2 border-black bg-[#00FF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#FFFF00]">
-                          Live
+                        <Badge className={`neo-pill ml-auto border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "bg-[#FFFF00] text-black animate-pulse" : "bg-[#00FF00] text-black"}`}>
+                          {isStreaming ? "Streaming..." : "Complete"}
                         </Badge>
                       </div>
                       <div className="prose prose-invert prose-sm max-w-none">
                         <div className="text-sm leading-relaxed font-medium whitespace-pre-wrap text-white/90">
-                          {aiAnalysis.result}
+                          {streamedText || aiAnalysis.result}
+                          {isStreaming && (
+                            <span className="inline-block w-2 h-4 ml-0.5 bg-[#00FF00] animate-pulse" />
+                          )}
                         </div>
                       </div>
                       <div className="mt-4 border-t border-white/20 pt-4">

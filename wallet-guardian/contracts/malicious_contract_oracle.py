@@ -252,10 +252,10 @@ def request_contract_scan(contract_address: str) -> bool:
     Returns:
         True if request was submitted successfully
     """
-    # Build URL: baseurl + address + ?format=oracle&chain=sepolia
-    # Uses Sepolia testnet for testnet compatibility
+    # Build URL: baseurl + address + ?format=oracle&chain=ethereum
+    # Uses Ethereum mainnet for production contract scanning
     base_url = get_api_url()
-    url = base_url + contract_address + "?format=oracle&chain=sepolia"
+    url = base_url + contract_address + "?format=oracle&chain=ethereum"
     
     # Filter path to extract the oracle_response field from JSON
     filter_path = "$.oracle_response"
