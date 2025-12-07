@@ -8,6 +8,8 @@ export const env = createEnv({
    */
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
+    ETHERSCAN_API_KEY: z.string().optional(),
+    NEO_RPC_URL: z.string().optional(),
   },
 
   /**
@@ -25,6 +27,8 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    ETHERSCAN_API_KEY: process.env.ETHERSCAN_API_KEY,
+    NEO_RPC_URL: process.env.NEO_RPC_URL,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**

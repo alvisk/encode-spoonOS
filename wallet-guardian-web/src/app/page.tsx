@@ -21,7 +21,10 @@ import {
   FileText,
   Copy,
   Check,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
+import { useVoiceAnnouncements } from "~/hooks/useVoiceAnnouncements";
 import { PaymentFlow } from "~/components/PaymentFlow";
 import { WalletToolsDashboard } from "~/components/WalletToolsDashboard";
 import { Badge } from "~/components/ui/badge";
@@ -253,19 +256,25 @@ const DEFAULT_WALLET: Wallet = {
   tags: [],
 };
 
-
-
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
+  
+  // Voice announcements hook
+  const { speak, isSpeaking, stop, config, toggleEnabled } = useVoiceAnnouncements();
 
   // Aggregate activities from all wallets and sort by timestamp
   const allActivities = Object.values(mockActivityByAddress)
     .flat()
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    .sort(
+      (a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
   const activities = allActivities;
 
   // Scanner mode toggle
-  const [scannerMode, setScannerMode] = useState<"wallet" | "contract">("wallet");
+  const [scannerMode, setScannerMode] = useState<"wallet" | "contract">(
+    "wallet",
+  );
 
   const [scanAddress, setScanAddress] = useState("");
   const [scanStatus, setScanStatus] = useState<
@@ -333,15 +342,20 @@ export default function HomePage() {
 
   // Malicious Contract Detector Tool
   const [contractAddress, setContractAddress] = useState("");
-  const [contractChain, setContractChain] = useState<"ethereum" | "sepolia">("ethereum");
+  const [contractChain, setContractChain] = useState<"ethereum">("ethereum");
   const [contractLoading, setContractLoading] = useState(false);
-  const [contractResult, setContractResult] = useState<MaliciousContractResult | null>(null);
+  const [contractResult, setContractResult] =
+    useState<MaliciousContractResult | null>(null);
   const [contractError, setContractError] = useState<string | null>(null);
 
   // Action Draft Tool
-  const [reportChannel, setReportChannel] = useState<"console" | "dm" | "email" | "tweet" | "alert">("console");
+  const [reportChannel, setReportChannel] = useState<
+    "console" | "dm" | "email" | "tweet" | "alert"
+  >("console");
   const [reportLoading, setReportLoading] = useState(false);
-  const [reportResult, setReportResult] = useState<ActionDraftResult | null>(null);
+  const [reportResult, setReportResult] = useState<ActionDraftResult | null>(
+    null,
+  );
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportCopied, setReportCopied] = useState(false);
 
@@ -363,8 +377,6 @@ export default function HomePage() {
       abortControllerRef.current?.abort();
     };
   }, []);
-
-
 
   // Connect to NeoLine dAPI once the provider signals READY.
   useEffect(() => {
@@ -652,15 +664,10 @@ export default function HomePage() {
     try {
       // Start both fetches in parallel - wallet data will display immediately
       // while AI analysis loads in the background
-      await Promise.all([
-        fetchWalletData(),
-        fetchAiAnalysis(),
-      ]);
+      await Promise.all([fetchWalletData(), fetchAiAnalysis()]);
 
       // Only set done if we haven't already set payment_required or error
-      setScanStatus((current) =>
-        current === "loading" ? "done" : current
-      );
+      setScanStatus((current) => (current === "loading" ? "done" : current));
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Unexpected error");
       setScanStatus("error");
@@ -860,15 +867,20 @@ export default function HomePage() {
         contract_address: apiData.contract_address,
         chain: apiData.chain,
         contract_name: apiData.contract_name,
-        is_malicious: apiData.verdict?.is_malicious ?? apiData.is_malicious ?? false,
+        is_malicious:
+          apiData.verdict?.is_malicious ?? apiData.is_malicious ?? false,
         risk_score: apiData.verdict?.risk_score ?? apiData.risk_score ?? 0,
-        risk_level: apiData.verdict?.risk_level ?? apiData.risk_level ?? "unknown",
+        risk_level:
+          apiData.verdict?.risk_level ?? apiData.risk_level ?? "unknown",
         verified: apiData.is_verified ?? apiData.verified ?? false,
         summary: apiData.summary,
         detected_issues: apiData.detected_issues.map((issue) => ({
           type: issue.type ?? issue.category ?? "unknown",
           severity: issue.severity,
-          description: issue.description ?? issue.explanation ?? "No description available",
+          description:
+            issue.description ??
+            issue.explanation ??
+            "No description available",
         })),
       };
 
@@ -880,9 +892,10 @@ export default function HomePage() {
           `scan contract ${contractAddress.trim()} on ${contractChain} for malicious patterns`,
         );
         // Parse the result
-        const isMalicious = result.toLowerCase().includes("malicious") ||
-                           result.toLowerCase().includes("suspicious") ||
-                           result.toLowerCase().includes("high risk");
+        const isMalicious =
+          result.toLowerCase().includes("malicious") ||
+          result.toLowerCase().includes("suspicious") ||
+          result.toLowerCase().includes("high risk");
         const riskMatch = /risk[_\s]?score[:\s]+(\d+)/i.exec(result);
         const riskLevelMatch = /risk[_\s]?level[:\s]+(\w+)/i.exec(result);
 
@@ -890,9 +903,21 @@ export default function HomePage() {
           contract_address: contractAddress.trim(),
           chain: contractChain,
           is_malicious: isMalicious,
-          risk_score: riskMatch?.[1] ? parseInt(riskMatch[1]) : (isMalicious ? 75 : 25),
+          risk_score: riskMatch?.[1]
+            ? parseInt(riskMatch[1])
+            : isMalicious
+              ? 75
+              : 25,
           risk_level: riskLevelMatch?.[1] ?? (isMalicious ? "high" : "low"),
-          detected_issues: isMalicious ? [{ type: "suspicious_pattern", severity: "high", description: "AI detected potential malicious patterns" }] : [],
+          detected_issues: isMalicious
+            ? [
+                {
+                  type: "suspicious_pattern",
+                  severity: "high",
+                  description: "AI detected potential malicious patterns",
+                },
+              ]
+            : [],
           summary: result,
           verified: false,
         });
@@ -909,7 +934,9 @@ export default function HomePage() {
   // Action Draft Tool - Generate Report
   const runGenerateReport = async () => {
     if (!toolAddress.trim() && !validityResult) {
-      setReportError("Please run a validity score analysis first or enter an address");
+      setReportError(
+        "Please run a validity score analysis first or enter an address",
+      );
       return;
     }
     setReportLoading(true);
@@ -947,15 +974,17 @@ export default function HomePage() {
       return ["Review wallet activity", "Monitor for changes"];
     }
     const actions: string[] = [];
-    const lines = text.split('\n');
+    const lines = text.split("\n");
     const bulletRegex = /^[-•*]\s+/;
     const numberedRegex = /^\d+\.\s+/;
     for (const line of lines) {
       if (bulletRegex.exec(line) ?? numberedRegex.exec(line)) {
-        actions.push(line.replace(/^[-•*\d.]\s+/, '').trim());
+        actions.push(line.replace(/^[-•*\d.]\s+/, "").trim());
       }
     }
-    return actions.length > 0 ? actions : ["Review wallet activity", "Monitor for changes"];
+    return actions.length > 0
+      ? actions
+      : ["Review wallet activity", "Monitor for changes"];
   };
 
   // Copy report to clipboard
@@ -1006,8 +1035,6 @@ export default function HomePage() {
               >
                 <a href="#ui">Command Center</a>
               </Button>
-
-
             </div>
           </div>
           <div className="neo-card flex flex-col gap-3 border-4 border-black bg-black px-6 py-5 text-sm text-white shadow-[8px_8px_0_0_#FFFF00]">
@@ -1078,10 +1105,10 @@ export default function HomePage() {
               <div className="flex">
                 <button
                   onClick={() => setScannerMode("wallet")}
-                  className={`flex items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors min-w-[200px] ${
+                  className={`flex min-w-[200px] items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors ${
                     scannerMode === "wallet"
-                      ? "bg-[#00FF00] text-black border-r-0"
-                      : "bg-white text-black/50 hover:bg-gray-100 border-r-0"
+                      ? "border-r-0 bg-[#00FF00] text-black"
+                      : "border-r-0 bg-white text-black/50 hover:bg-gray-100"
                   }`}
                 >
                   <ShieldCheck className="h-5 w-5 shrink-0" strokeWidth={3} />
@@ -1089,7 +1116,7 @@ export default function HomePage() {
                 </button>
                 <button
                   onClick={() => setScannerMode("contract")}
-                  className={`flex items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors min-w-[200px] ${
+                  className={`flex min-w-[200px] items-center justify-center gap-2 border-4 border-black px-6 py-3 text-sm font-black tracking-wide uppercase transition-colors ${
                     scannerMode === "contract"
                       ? "bg-[#FF0000] text-white"
                       : "bg-white text-black/50 hover:bg-gray-100"
@@ -1103,7 +1130,9 @@ export default function HomePage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-2xl font-black tracking-wide uppercase">
-                    {scannerMode === "wallet" ? "Wallet Scanner" : "Contract Scanner"}
+                    {scannerMode === "wallet"
+                      ? "Wallet Scanner"
+                      : "Contract Scanner"}
                   </CardTitle>
                   <CardDescription className="mt-1 font-medium text-black/70">
                     {scannerMode === "wallet"
@@ -1111,9 +1140,13 @@ export default function HomePage() {
                       : "Scan Ethereum smart contracts for malicious patterns using AI."}
                   </CardDescription>
                 </div>
-                <Badge className={`neo-pill border-4 border-black font-black text-black uppercase shadow-[6px_6px_0_0_#000] ${
-                  scannerMode === "wallet" ? "bg-[#FFFF00]" : "bg-[#FF6600] text-white"
-                }`}>
+                <Badge
+                  className={`neo-pill border-4 border-black font-black text-black uppercase shadow-[6px_6px_0_0_#000] ${
+                    scannerMode === "wallet"
+                      ? "bg-[#FFFF00]"
+                      : "bg-[#FF6600] text-white"
+                  }`}
+                >
                   {scannerMode === "wallet" ? "Beta" : "AI Powered"}
                 </Badge>
               </div>
@@ -1122,334 +1155,391 @@ export default function HomePage() {
               {/* WALLET SCANNER CONTENT */}
               {scannerMode === "wallet" && (
                 <>
-              <div className="flex flex-col gap-3">
-                <label
-                  className="text-sm font-black tracking-wider text-black uppercase"
-                  htmlFor="scan"
-                >
-                  Target Address
-                </label>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    id="scan"
-                    value={scanAddress}
-                    onChange={(e) => setScanAddress(e.target.value)}
-                    placeholder="Enter Neo N3 (N...) or Ethereum (0x...) address..."
-                    className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[6px_6px_0_0_#000] transition-none focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[4px_4px_0_0_#000] focus:outline-none"
-                  />
-                  <Button
-                    onClick={() => void runSelfScan()}
-                    disabled={scanStatus === "loading" || !scanAddress.trim()}
-                    className="neo-button border-4 border-black bg-[#00FF00] px-8 font-black tracking-wider text-black uppercase shadow-[6px_6px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none disabled:opacity-50"
-                  >
-                    {scanStatus === "loading" ? "SCANNING..." : "SCAN"}
-                  </Button>
-                </div>
-                {scanError ? (
-                  <p className="text-sm font-black tracking-wide text-[#FF0000] uppercase">
-                    ERROR: {scanError}
-                  </p>
-                ) : null}
-
-                {/* Quick Examples */}
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-bold text-black/60">Examples:</span>
-                  <button
-                    onClick={() => setScanAddress("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")}
-                    className="font-mono text-[#0066CC] hover:underline hover:text-[#0044AA] transition-colors"
-                  >
-                    vitalik.eth
-                  </button>
-                  <span className="text-black/30">|</span>
-                  <button
-                    onClick={() => setScanAddress("NTTGFxiBtGX28xMTTFyjZhG3n6s5p9kvcd")}
-                    className="font-mono text-[#00AA66] hover:underline hover:text-[#008855] transition-colors"
-                  >
-                    Neo N3 Wallet
-                  </button>
-                  <span className="text-black/30">|</span>
-                  <button
-                    onClick={() => setScanAddress("0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B")}
-                    className="font-mono text-[#9933FF] hover:underline hover:text-[#7722DD] transition-colors"
-                  >
-                    Early ETH Whale
-                  </button>
-                </div>
-              </div>
-
-              {/* PAYWALLED ENDPOINT TOGGLE */}
-              <div className="flex flex-col gap-4 border-4 border-black bg-[#1a1a2e] p-5 shadow-[6px_6px_0_0_#FFFF00]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                      <CreditCard
-                        className="h-5 w-5 text-black"
-                        strokeWidth={3}
+                  <div className="flex flex-col gap-3">
+                    <label
+                      className="text-sm font-black tracking-wider text-black uppercase"
+                      htmlFor="scan"
+                    >
+                      Target Address
+                    </label>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <input
+                        id="scan"
+                        value={scanAddress}
+                        onChange={(e) => setScanAddress(e.target.value)}
+                        placeholder="Enter Neo N3 (N...) or Ethereum (0x...) address..."
+                        className="neo-input w-full border-4 border-black px-4 py-3 font-mono text-sm shadow-[6px_6px_0_0_#000] transition-none focus:translate-x-0.5 focus:translate-y-0.5 focus:shadow-[4px_4px_0_0_#000] focus:outline-none"
                       />
+                      <Button
+                        onClick={() => void runSelfScan()}
+                        disabled={
+                          scanStatus === "loading" || !scanAddress.trim()
+                        }
+                        className="neo-button border-4 border-black bg-[#00FF00] px-8 font-black tracking-wider text-black uppercase shadow-[6px_6px_0_0_#000] transition-none hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none disabled:opacity-50"
+                      >
+                        {scanStatus === "loading" ? "SCANNING..." : "SCAN"}
+                      </Button>
                     </div>
-                    <div>
-                      <p className="text-sm font-black tracking-wider text-[#FFFF00] uppercase">
-                        x402 Paywalled Mode
+                    {scanError ? (
+                      <p className="text-sm font-black tracking-wide text-[#FF0000] uppercase">
+                        ERROR: {scanError}
                       </p>
-                      <p className="text-xs text-white/60">
-                        Use the monetized endpoint (0.01 USDC/call on Base
-                        Sepolia)
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setUsePaywalled(!usePaywalled)}
-                    className={`relative h-8 w-14 rounded-none border-4 border-black transition-colors ${
-                      usePaywalled ? "bg-[#00FF00]" : "bg-white/20"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 bg-black transition-transform ${
-                        usePaywalled ? "left-7" : "left-0.5"
-                      }`}
-                    />
-                  </button>
-                </div>
+                    ) : null}
 
-                {usePaywalled && scanStatus !== "payment_required" && (
-                  <div className="border-t border-white/20 pt-3">
-                    <p className="text-xs text-white/50">
-                      When you scan a wallet, you&apos;ll be prompted to pay
-                      with your connected wallet.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* PAYMENT REQUIRED STATE - Click-through wallet payment flow */}
-              {scanStatus === "payment_required" && x402Requirements && (
-                <PaymentFlow
-                  requirements={x402Requirements}
-                  onPaymentComplete={(signedPaymentHeader) => {
-                    // After user signs authorization, set the x402 payment header and retry
-                    setPaymentHeader(signedPaymentHeader);
-                    console.log(
-                      "[x402] Payment complete, retrying with header length:",
-                      signedPaymentHeader.length,
-                    );
-                    // Pass payment header directly to avoid React state timing issues
-                    void runSelfScan(signedPaymentHeader);
-                  }}
-                  onCancel={() => {
-                    setScanStatus("idle");
-                    setX402Requirements(null);
-                    setUsePaywalled(false);
-                  }}
-                />
-              )}
-
-              {scanWallet && scanStatus !== "payment_required" ? (
-                <>
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    {/* WALLET INFO CARD */}
-                    <div className="neo-card border-4 border-black bg-white p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-2">
-                          <p className="text-xs font-black tracking-widest text-black uppercase">
-                            {"//"} ADDRESS
-                          </p>
-                          <p className="font-mono text-sm break-all text-black">
-                            {scanWallet.address}
-                          </p>
-                        </div>
-                        <Badge
-                          className={`neo-pill ${riskTone(scanWallet.riskScore)} border-4 border-black font-black shadow-[4px_4px_0_0_#000]`}
-                        >
-                          {scanWallet.riskScore}/100
-                        </Badge>
-                      </div>
-                      <div className="mt-4 border-t-2 border-black pt-4">
-                        <p className="text-sm font-bold text-black">
-                          {scanWallet.label ?? "UNKNOWN WALLET"}
-                        </p>
-                        <p className="text-xs tracking-wide text-black/70 uppercase">
-                          Chains: {scanWallet.chains?.join(", ") || "Neo N3"}
-                        </p>
-                        <p className="mt-2 text-2xl font-black text-black">
-                          {formatUSD(scanWallet.balanceUSD || 0)}
-                        </p>
-                      </div>
-                      {scanWallet.tags?.length ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {scanWallet.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="neo-pill border-3 border-black bg-[#E5E5E5] px-3 py-1 text-xs font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {/* ACTIVITY CARD */}
-                    <div className="neo-card border-4 border-black bg-[#E3F2FD] p-5">
-                      <p className="text-xs font-black tracking-widest text-black uppercase">
-                        {"//"} RECENT ACTIVITY
-                      </p>
-                      <div className="mt-4 flex flex-col gap-3">
-                        {scanActivity.length === 0 ? (
-                          <p className="text-sm font-bold text-black/70 uppercase">
-                            No transfers recorded.
-                          </p>
-                        ) : (
-                          scanActivity.slice(0, 4).map((tx) => (
-                            <div
-                              key={tx.id ?? tx.hash}
-                              className="flex items-center justify-between border-4 border-black bg-white px-4 py-3 shadow-[4px_4px_0_0_#000]"
-                            >
-                              <div>
-                                <p className="text-sm font-black text-black uppercase">
-                                  {tx.type} • {tx.tokenSymbol}
-                                </p>
-                                <p className="max-w-[150px] truncate font-mono text-xs text-black/60">
-                                  {tx.hash}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs font-bold text-black uppercase">
-                                  {tx.chain}
-                                </p>
-                                <p className="text-sm font-black text-black">
-                                  {formatUSD(tx.amountUSD)}
-                                </p>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                    {/* Quick Examples */}
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-bold text-black/60">Examples:</span>
+                      <button
+                        onClick={() =>
+                          setScanAddress(
+                            "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+                          )
+                        }
+                        className="font-mono text-[#0066CC] transition-colors hover:text-[#0044AA] hover:underline"
+                      >
+                        vitalik.eth
+                      </button>
+                      <span className="text-black/30">|</span>
+                      <button
+                        onClick={() =>
+                          setScanAddress("NikhQp1aAD1YFCiwknhM5LQQebj4464bCJ")
+                        }
+                        className="font-mono text-[#00AA66] transition-colors hover:text-[#008855] hover:underline"
+                      >
+                        Neo N3 Wallet
+                      </button>
+                      <span className="text-black/30">|</span>
+                      <button
+                        onClick={() =>
+                          setScanAddress(
+                            "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
+                          )
+                        }
+                        className="font-mono text-[#9933FF] transition-colors hover:text-[#7722DD] hover:underline"
+                      >
+                        Early ETH Whale
+                      </button>
                     </div>
                   </div>
 
-                  {/* AI ANALYSIS CARD - SpoonOS Response */}
-                  {aiAnalysis ? (
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                          <Bot className="h-6 w-6 text-black" strokeWidth={3} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
-                            {"//"} SPOONOS AI ANALYSIS
-                          </p>
-                          <p className="font-mono text-xs text-white/60">
-                            Agent: assertion-os
-                          </p>
-                        </div>
-                        <Badge className={`neo-pill ml-auto border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "bg-[#FFFF00] text-black animate-pulse" : "bg-[#00FF00] text-black"}`}>
-                          {isStreaming ? "Streaming..." : "Complete"}
-                        </Badge>
-                      </div>
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        <div className="text-sm leading-relaxed font-medium whitespace-pre-wrap text-white/90">
-                          {streamedText || aiAnalysis.result}
-                          {isStreaming && (
-                            <span className="inline-block w-2 h-4 ml-0.5 bg-[#00FF00] animate-pulse" />
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-4 border-t border-white/20 pt-4">
-                        <p className="font-mono text-xs text-white/50">
-                          Powered by SpoonOS x402 Gateway • Neo N3 Blockchain
-                          {aiAnalysis.payer && (
-                            <span className="mt-1 block">
-                              Paid by: {aiAnalysis.payer.slice(0, 6)}...
-                              {aiAnalysis.payer.slice(-4)}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* AI Loading State - Show while AI analysis is loading */
-                    <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                  {/* PAYWALLED ENDPOINT TOGGLE */}
+                  <div className="flex flex-col gap-4 border-4 border-black bg-[#1a1a2e] p-5 shadow-[6px_6px_0_0_#FFFF00]">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
-                          <Loader2 className="h-6 w-6 text-black animate-spin" strokeWidth={3} />
+                          <CreditCard
+                            className="h-5 w-5 text-black"
+                            strokeWidth={3}
+                          />
                         </div>
                         <div>
-                          <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
-                            {"//"} ANALYZING WALLET
+                          <p className="text-sm font-black tracking-wider text-[#FFFF00] uppercase">
+                            x402 Paywalled Mode
                           </p>
-                          <p className="font-mono text-xs text-white/60">
-                            SpoonOS Agent Processing...
+                          <p className="text-xs text-white/60">
+                            Use the monetized endpoint (0.01 USDC/call on Base
+                            Sepolia)
                           </p>
                         </div>
-                        <Badge className="neo-pill ml-auto border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00] animate-pulse">
-                          Analyzing
-                        </Badge>
                       </div>
-                      <div className="mt-4 space-y-2">
-                        <div className="h-3 bg-white/10 rounded animate-pulse" />
-                        <div className="h-3 bg-white/10 rounded animate-pulse w-4/5" />
-                        <div className="h-3 bg-white/10 rounded animate-pulse w-3/5" />
-                      </div>
+                      <button
+                        onClick={() => setUsePaywalled(!usePaywalled)}
+                        className={`relative h-8 w-14 rounded-none border-4 border-black transition-colors ${
+                          usePaywalled ? "bg-[#00FF00]" : "bg-white/20"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 h-5 w-5 bg-black transition-transform ${
+                            usePaywalled ? "left-7" : "left-0.5"
+                          }`}
+                        />
+                      </button>
                     </div>
+
+                    {usePaywalled && scanStatus !== "payment_required" && (
+                      <div className="border-t border-white/20 pt-3">
+                        <p className="text-xs text-white/50">
+                          When you scan a wallet, you&apos;ll be prompted to pay
+                          with your connected wallet.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PAYMENT REQUIRED STATE - Click-through wallet payment flow */}
+                  {scanStatus === "payment_required" && x402Requirements && (
+                    <PaymentFlow
+                      requirements={x402Requirements}
+                      onPaymentComplete={(signedPaymentHeader) => {
+                        // After user signs authorization, set the x402 payment header and retry
+                        setPaymentHeader(signedPaymentHeader);
+                        console.log(
+                          "[x402] Payment complete, retrying with header length:",
+                          signedPaymentHeader.length,
+                        );
+                        // Pass payment header directly to avoid React state timing issues
+                        void runSelfScan(signedPaymentHeader);
+                      }}
+                      onCancel={() => {
+                        setScanStatus("idle");
+                        setX402Requirements(null);
+                        setUsePaywalled(false);
+                      }}
+                    />
                   )}
 
-                  {/* ALERTS CARD */}
-                  <div
-                    className={`neo-card border-4 border-black p-5 ${scanAlerts.some((a) => a.severity === "critical") ? "alert-critical bg-[#FFE5E5]" : "bg-[#FFF8E1]"}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-black tracking-widest text-black uppercase">
-                        {"//"} THREAT ANALYSIS
-                      </p>
-                      <Badge
-                        className={`neo-pill ${scanAlerts.length > 0 ? "bg-[#FF0000] text-white" : "bg-[#00FF00] text-black"} border-4 border-black font-black uppercase shadow-[4px_4px_0_0_#000]`}
-                      >
-                        {scanAlerts.length}{" "}
-                        {scanAlerts.length === 1 ? "Alert" : "Alerts"}
-                      </Badge>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      {scanAlerts.length === 0 ? (
-                        <p className="text-sm font-bold text-black/70 uppercase">
-                          No active threats detected.
-                        </p>
-                      ) : (
-                        scanAlerts.map((alert) => (
-                          <div
-                            key={alert.id}
-                            className="border-4 border-black bg-white px-4 py-3 shadow-[4px_4px_0_0_#000]"
-                          >
-                            <p className="text-sm font-black text-black uppercase">
-                              {alert.title}
+                  {scanWallet && scanStatus !== "payment_required" ? (
+                    <>
+                      <div className="grid gap-6 lg:grid-cols-2">
+                        {/* WALLET INFO CARD */}
+                        <div className="neo-card border-4 border-black bg-white p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-2">
+                              <p className="text-xs font-black tracking-widest text-black uppercase">
+                                {"//"} ADDRESS
+                              </p>
+                              <p className="font-mono text-sm break-all text-black">
+                                {scanWallet.address}
+                              </p>
+                            </div>
+                            <Badge
+                              className={`neo-pill ${riskTone(scanWallet.riskScore)} border-4 border-black font-black shadow-[4px_4px_0_0_#000]`}
+                            >
+                              {scanWallet.riskScore}/100
+                            </Badge>
+                          </div>
+                          <div className="mt-4 border-t-2 border-black pt-4">
+                            <p className="text-sm font-bold text-black">
+                              {scanWallet.label ?? "UNKNOWN WALLET"}
                             </p>
-                            <p className="mt-1 text-xs text-black/70">
-                              {alert.description}
+                            <p className="text-xs tracking-wide text-black/70 uppercase">
+                              Chains:{" "}
+                              {scanWallet.chains?.join(", ") || "Neo N3"}
                             </p>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <span
-                                className={`neo-pill ${severityBadge(alert.severity)} border-3 border-black px-3 py-1 text-xs uppercase shadow-[3px_3px_0_0_#000]`}
+                            <p className="mt-2 text-2xl font-black text-black">
+                              {formatUSD(scanWallet.balanceUSD || 0)}
+                            </p>
+                          </div>
+                          {scanWallet.tags?.length ? (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {scanWallet.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="neo-pill border-3 border-black bg-[#E5E5E5] px-3 py-1 text-xs font-black text-black uppercase shadow-[4px_4px_0_0_#000]"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {/* ACTIVITY CARD */}
+                        <div className="neo-card border-4 border-black bg-[#E3F2FD] p-5">
+                          <p className="text-xs font-black tracking-widest text-black uppercase">
+                            {"//"} RECENT ACTIVITY
+                          </p>
+                          <div className="mt-4 flex flex-col gap-3">
+                            {scanActivity.length === 0 ? (
+                              <p className="text-sm font-bold text-black/70 uppercase">
+                                No transfers recorded.
+                              </p>
+                            ) : (
+                              scanActivity.slice(0, 4).map((tx) => (
+                                <div
+                                  key={tx.id ?? tx.hash}
+                                  className="flex items-center justify-between border-4 border-black bg-white px-4 py-3 shadow-[4px_4px_0_0_#000]"
+                                >
+                                  <div>
+                                    <p className="text-sm font-black text-black uppercase">
+                                      {tx.type} • {tx.tokenSymbol}
+                                    </p>
+                                    <p className="max-w-[150px] truncate font-mono text-xs text-black/60">
+                                      {tx.hash}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-xs font-bold text-black uppercase">
+                                      {tx.chain}
+                                    </p>
+                                    <p className="text-sm font-black text-black">
+                                      {formatUSD(tx.amountUSD)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI ANALYSIS CARD - SpoonOS Response */}
+                      {aiAnalysis ? (
+                        <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                              <Bot
+                                className="h-6 w-6 text-black"
+                                strokeWidth={3}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                                {"//"} SPOONOS AI ANALYSIS
+                              </p>
+                              <p className="font-mono text-xs text-white/60">
+                                Agent: assertion-os
+                              </p>
+                            </div>
+                            <div className="ml-auto flex items-center gap-2">
+                              {/* Voice Button */}
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  if (isSpeaking) {
+                                    stop();
+                                  } else {
+                                    const text = streamedText || aiAnalysis.result || "";
+                                    if (text) {
+                                      // Use natural voice with friendly persona for better TTS
+                                      speak(text, { 
+                                        severity: "info",
+                                        persona: "friendly",
+                                        useNaturalVoice: true,
+                                      });
+                                    }
+                                  }
+                                }}
+                                disabled={isStreaming || (!streamedText && !aiAnalysis.result)}
+                                className={`neo-button border-2 border-black px-3 py-1 font-black uppercase shadow-[3px_3px_0_0_#FFFF00] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#FFFF00] disabled:opacity-50 ${
+                                  isSpeaking 
+                                    ? "bg-[#FF0000] text-white" 
+                                    : "bg-[#00FF00] text-black"
+                                }`}
+                                title={isSpeaking ? "Stop speaking" : "Read analysis aloud"}
                               >
-                                {alert.severity}
-                              </span>
-                              <span
-                                className={`neo-pill ${statusBadge(alert.status)} border-3 border-black px-3 py-1 text-xs uppercase shadow-[3px_3px_0_0_#000]`}
+                                {isSpeaking ? (
+                                  <VolumeX className="h-4 w-4" strokeWidth={3} />
+                                ) : (
+                                  <Volume2 className="h-4 w-4" strokeWidth={3} />
+                                )}
+                              </Button>
+                              <Badge
+                                className={`neo-pill border-2 border-black text-xs font-black uppercase shadow-[3px_3px_0_0_#FFFF00] ${isStreaming ? "animate-pulse bg-[#FFFF00] text-black" : "bg-[#00FF00] text-black"}`}
                               >
-                                {alert.status}
-                              </span>
+                                {isStreaming ? "Streaming..." : "Complete"}
+                              </Badge>
                             </div>
                           </div>
-                        ))
+                          <div className="prose prose-invert prose-sm max-w-none">
+                            <div className="text-sm leading-relaxed font-medium whitespace-pre-wrap text-white/90">
+                              {streamedText || aiAnalysis.result}
+                              {isStreaming && (
+                                <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-[#00FF00]" />
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-4 flex items-center justify-between border-t border-white/20 pt-4">
+                            <p className="font-mono text-xs text-white/50">
+                              Powered by SpoonOS x402 Gateway • Neo N3
+                              Blockchain
+                              {aiAnalysis.payer && (
+                                <span className="mt-1 block">
+                                  Paid by: {aiAnalysis.payer.slice(0, 6)}...
+                                  {aiAnalysis.payer.slice(-4)}
+                                </span>
+                              )}
+                            </p>
+                            {/* Voice status indicator */}
+                            {isSpeaking && (
+                              <div className="flex items-center gap-2">
+                                <div className="h-2 w-2 animate-pulse rounded-full bg-[#00FF00]" />
+                                <span className="text-xs font-bold text-[#00FF00]">Speaking...</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        /* AI Loading State - Show while AI analysis is loading */
+                        <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
+                          <div className="flex items-center gap-3">
+                            <div className="rounded border-2 border-black bg-[#FFFF00] p-2">
+                              <Loader2
+                                className="h-6 w-6 animate-spin text-black"
+                                strokeWidth={3}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-xs font-black tracking-widest text-[#FFFF00] uppercase">
+                                {"//"} ANALYZING WALLET
+                              </p>
+                              <p className="font-mono text-xs text-white/60">
+                                SpoonOS Agent Processing...
+                              </p>
+                            </div>
+                            <Badge className="neo-pill ml-auto animate-pulse border-2 border-black bg-[#FFFF00] text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#00FF00]">
+                              Analyzing
+                            </Badge>
+                          </div>
+                          <div className="mt-4 space-y-2">
+                            <div className="h-3 animate-pulse rounded bg-white/10" />
+                            <div className="h-3 w-4/5 animate-pulse rounded bg-white/10" />
+                            <div className="h-3 w-3/5 animate-pulse rounded bg-white/10" />
+                          </div>
+                        </div>
                       )}
+
+                      {/* ALERTS CARD */}
+                      {scanAlerts.length > 0 && (
+                        <div
+                          className={`neo-card border-4 border-black p-5 ${scanAlerts.some((a) => a.severity === "critical") ? "alert-critical bg-[#FFE5E5]" : "bg-[#FFF8E1]"}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-black tracking-widest text-black uppercase">
+                              {"//"} THREAT ANALYSIS
+                            </p>
+                            <Badge className="neo-pill border-4 border-black bg-[#FF0000] font-black text-white uppercase shadow-[4px_4px_0_0_#000]">
+                              {scanAlerts.length}{" "}
+                              {scanAlerts.length === 1 ? "Alert" : "Alerts"}
+                            </Badge>
+                          </div>
+                          <div className="mt-4 space-y-3">
+                            {scanAlerts.map((alert) => (
+                              <div
+                                key={alert.id}
+                                className="border-4 border-black bg-white px-4 py-3 shadow-[4px_4px_0_0_#000]"
+                              >
+                                <p className="text-sm font-black text-black uppercase">
+                                  {alert.title}
+                                </p>
+                                <p className="mt-1 text-xs text-black/70">
+                                  {alert.description}
+                                </p>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`neo-pill ${severityBadge(alert.severity)} border-3 border-black px-3 py-1 text-xs uppercase shadow-[3px_3px_0_0_#000]`}
+                                  >
+                                    {alert.severity}
+                                  </span>
+                                  <span
+                                    className={`neo-pill ${statusBadge(alert.status)} border-3 border-black px-3 py-1 text-xs uppercase shadow-[3px_3px_0_0_#000]`}
+                                  >
+                                    {alert.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="border-4 border-dashed border-black/30 p-8 text-center">
+                      <p className="text-sm font-bold tracking-wide text-black/50 uppercase">
+                        Input an address above to initiate security scan.
+                      </p>
                     </div>
-                  </div>
-                </>
-              ) : (
-                <div className="border-4 border-dashed border-black/30 p-8 text-center">
-                  <p className="text-sm font-bold tracking-wide text-black/50 uppercase">
-                    Input an address above to initiate security scan.
-                  </p>
-                </div>
-              )}
+                  )}
                 </>
               )}
 
@@ -1483,19 +1573,9 @@ export default function HomePage() {
                         Network:
                       </span>
                       <div className="flex gap-2">
-                        {(["ethereum", "sepolia"] as const).map((chain) => (
-                          <button
-                            key={chain}
-                            onClick={() => setContractChain(chain)}
-                            className={`neo-pill border-3 border-black px-4 py-2 text-xs font-black uppercase ${
-                              contractChain === chain
-                                ? "bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]"
-                                : "bg-white text-black/50 hover:bg-gray-100"
-                            }`}
-                          >
-                            {chain === "ethereum" ? "Mainnet" : "Sepolia"}
-                          </button>
-                        ))}
+                        <span className="neo-pill border-3 border-black px-4 py-2 text-xs font-black uppercase bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]">
+                          Mainnet
+                        </span>
                       </div>
                     </div>
 
@@ -1504,30 +1584,36 @@ export default function HomePage() {
                       <span className="font-bold text-black/60">Examples:</span>
                       <button
                         onClick={() => {
-                          setContractAddress("0xbb9bc244d798123fde783fcc1c72d3bb8c189413");
+                          setContractAddress(
+                            "0xbb9bc244d798123fde783fcc1c72d3bb8c189413",
+                          );
                           setContractChain("ethereum");
                         }}
-                        className="font-mono text-[#FF0000] hover:underline hover:text-[#CC0000] transition-colors"
+                        className="font-mono text-[#FF0000] transition-colors hover:text-[#CC0000] hover:underline"
                       >
                         The DAO (Hacked)
                       </button>
                       <span className="text-black/30">|</span>
                       <button
                         onClick={() => {
-                          setContractAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+                          setContractAddress(
+                            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                          );
                           setContractChain("ethereum");
                         }}
-                        className="font-mono text-[#00AA66] hover:underline hover:text-[#008855] transition-colors"
+                        className="font-mono text-[#00AA66] transition-colors hover:text-[#008855] hover:underline"
                       >
                         USDC (Safe)
                       </button>
                       <span className="text-black/30">|</span>
                       <button
                         onClick={() => {
-                          setContractAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7");
+                          setContractAddress(
+                            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                          );
                           setContractChain("ethereum");
                         }}
-                        className="font-mono text-[#0066CC] hover:underline hover:text-[#0044AA] transition-colors"
+                        className="font-mono text-[#0066CC] transition-colors hover:text-[#0044AA] hover:underline"
                       >
                         USDT (Tether)
                       </button>
@@ -1543,26 +1629,36 @@ export default function HomePage() {
                   {contractResult ? (
                     <div className="space-y-6">
                       {/* Main Verdict Card */}
-                      <div className={`neo-card border-4 border-black p-6 ${
-                        contractResult.is_malicious
-                          ? "bg-gradient-to-br from-[#FFE5E5] to-[#FFCCCC]"
-                          : "bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9]"
-                      }`}>
+                      <div
+                        className={`neo-card border-4 border-black p-6 ${
+                          contractResult.is_malicious
+                            ? "bg-gradient-to-br from-[#FFE5E5] to-[#FFCCCC]"
+                            : "bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9]"
+                        }`}
+                      >
                         <div className="flex items-start justify-between gap-4">
                           <div className="space-y-3">
                             <div className="flex items-center gap-3">
                               {contractResult.is_malicious ? (
                                 <div className="border-4 border-black bg-[#FF0000] p-2">
-                                  <AlertTriangle className="h-6 w-6 text-white" strokeWidth={3} />
+                                  <AlertTriangle
+                                    className="h-6 w-6 text-white"
+                                    strokeWidth={3}
+                                  />
                                 </div>
                               ) : (
                                 <div className="border-4 border-black bg-[#00FF00] p-2">
-                                  <ShieldCheck className="h-6 w-6 text-black" strokeWidth={3} />
+                                  <ShieldCheck
+                                    className="h-6 w-6 text-black"
+                                    strokeWidth={3}
+                                  />
                                 </div>
                               )}
                               <div>
                                 <p className="text-3xl font-black uppercase">
-                                  {contractResult.is_malicious ? "MALICIOUS" : "SAFE"}
+                                  {contractResult.is_malicious
+                                    ? "MALICIOUS"
+                                    : "SAFE"}
                                 </p>
                                 <p className="text-sm font-bold text-black/70">
                                   Contract Analysis Complete
@@ -1583,15 +1679,19 @@ export default function HomePage() {
                               )}
                             </div>
                           </div>
-                          <div className="text-right space-y-2">
-                            <div className={`neo-pill border-4 border-black px-4 py-2 font-black ${
-                              contractResult.risk_score >= 70
-                                ? "bg-[#FF0000] text-white"
-                                : contractResult.risk_score >= 40
-                                  ? "bg-[#FFFF00] text-black"
-                                  : "bg-[#00FF00] text-black"
-                            }`}>
-                              <p className="text-2xl">{contractResult.risk_score}</p>
+                          <div className="space-y-2 text-right">
+                            <div
+                              className={`neo-pill border-4 border-black px-4 py-2 font-black ${
+                                contractResult.risk_score >= 70
+                                  ? "bg-[#FF0000] text-white"
+                                  : contractResult.risk_score >= 40
+                                    ? "bg-[#FFFF00] text-black"
+                                    : "bg-[#00FF00] text-black"
+                              }`}
+                            >
+                              <p className="text-2xl">
+                                {contractResult.risk_score}
+                              </p>
                               <p className="text-xs uppercase">/100 Risk</p>
                             </div>
                             <Badge className="neo-pill border-2 border-black bg-[#00BFFF] text-xs font-black text-black uppercase">
@@ -1609,7 +1709,7 @@ export default function HomePage() {
                       {/* Detected Issues */}
                       {contractResult.detected_issues.length > 0 && (
                         <div className="neo-card border-4 border-black bg-[#FFF8E1] p-5">
-                          <div className="flex items-center justify-between mb-4">
+                          <div className="mb-4 flex items-center justify-between">
                             <p className="text-xs font-black tracking-widest text-black uppercase">
                               {"//"} Detected Issues
                             </p>
@@ -1618,38 +1718,51 @@ export default function HomePage() {
                             </Badge>
                           </div>
                           <div className="space-y-3">
-                            {contractResult.detected_issues.map((issue, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-start gap-3 border-4 border-black bg-white p-4 shadow-[4px_4px_0_0_#000]"
-                              >
-                                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${
-                                  issue.severity === "critical" || issue.severity === "high"
-                                    ? "text-[#FF0000]"
-                                    : issue.severity === "medium"
-                                      ? "text-[#FFAA00]"
-                                      : "text-[#00BFFF]"
-                                }`} strokeWidth={3} />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="text-sm font-black uppercase">
-                                      {issue.type?.replace(/_/g, " ") ?? "Unknown Issue"}
+                            {contractResult.detected_issues.map(
+                              (issue, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-start gap-3 border-4 border-black bg-white p-4 shadow-[4px_4px_0_0_#000]"
+                                >
+                                  <AlertTriangle
+                                    className={`mt-0.5 h-5 w-5 shrink-0 ${
+                                      issue.severity === "critical" ||
+                                      issue.severity === "high"
+                                        ? "text-[#FF0000]"
+                                        : issue.severity === "medium"
+                                          ? "text-[#FFAA00]"
+                                          : "text-[#00BFFF]"
+                                    }`}
+                                    strokeWidth={3}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-black uppercase">
+                                        {issue.type?.replace(/_/g, " ") ??
+                                          "Unknown Issue"}
+                                      </p>
+                                      <Badge
+                                        className={`neo-pill border-2 border-black text-xs font-black uppercase ${
+                                          issue.severity === "critical"
+                                            ? "bg-[#FF0000] text-white"
+                                            : issue.severity === "high"
+                                              ? "bg-[#FFAA00] text-black"
+                                              : issue.severity === "medium"
+                                                ? "bg-[#FFFF00] text-black"
+                                                : "bg-[#00BFFF] text-black"
+                                        }`}
+                                      >
+                                        {issue.severity ?? "unknown"}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-1 text-sm text-black/70">
+                                      {issue.description ??
+                                        "No description available"}
                                     </p>
-                                    <Badge className={`neo-pill border-2 border-black text-xs font-black uppercase ${
-                                      issue.severity === "critical" ? "bg-[#FF0000] text-white" :
-                                      issue.severity === "high" ? "bg-[#FFAA00] text-black" :
-                                      issue.severity === "medium" ? "bg-[#FFFF00] text-black" :
-                                      "bg-[#00BFFF] text-black"
-                                    }`}>
-                                      {issue.severity ?? "unknown"}
-                                    </Badge>
                                   </div>
-                                  <p className="mt-1 text-sm text-black/70">
-                                    {issue.description ?? "No description available"}
-                                  </p>
                                 </div>
-                              </div>
-                            ))}
+                              ),
+                            )}
                           </div>
                         </div>
                       )}
@@ -1657,9 +1770,12 @@ export default function HomePage() {
                       {/* AI Summary */}
                       {contractResult.summary && (
                         <div className="neo-card border-4 border-black bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-6 text-white">
-                          <div className="flex items-center gap-3 mb-4">
+                          <div className="mb-4 flex items-center gap-3">
                             <div className="rounded border-2 border-black bg-[#FF0000] p-2">
-                              <Bot className="h-5 w-5 text-white" strokeWidth={3} />
+                              <Bot
+                                className="h-5 w-5 text-white"
+                                strokeWidth={3}
+                              />
                             </div>
                             <div>
                               <p className="text-xs font-black tracking-widest text-[#FF6600] uppercase">
@@ -1678,7 +1794,10 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div className="border-4 border-dashed border-black/30 p-8 text-center">
-                      <Bug className="mx-auto h-12 w-12 text-black/30 mb-3" strokeWidth={2} />
+                      <Bug
+                        className="mx-auto mb-3 h-12 w-12 text-black/30"
+                        strokeWidth={2}
+                      />
                       <p className="text-sm font-bold tracking-wide text-black/50 uppercase">
                         Enter a contract address to scan for malicious patterns.
                       </p>
@@ -1693,7 +1812,7 @@ export default function HomePage() {
           </Card>
 
           {/* SPOONOS CARD */}
-          <Card className="neo-card border-black bg-black text-white self-start">
+          <Card className="neo-card self-start border-black bg-black text-white">
             <CardHeader className="border-b-4 border-white/20 pb-4">
               <CardTitle className="text-lg font-black tracking-wider text-[#FFFF00] uppercase">
                 {"//"} SpoonOS Agent
@@ -1702,11 +1821,11 @@ export default function HomePage() {
                 Deep LLM-powered wallet analysis.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4 text-sm text-white min-h-0 overflow-hidden">
+            <CardContent className="min-h-0 space-y-4 overflow-hidden pt-4 text-sm text-white">
               <p className="font-black tracking-wide text-[#00FF00] uppercase">
                 Live API:
               </p>
-              <pre className="border-4 border-white/30 bg-black px-4 py-3 font-mono text-xs whitespace-pre-wrap break-all text-[#00FF00] shadow-[6px_6px_0_0_#FFFF00] overflow-x-auto">
+              <pre className="overflow-x-auto border-4 border-white/30 bg-black px-4 py-3 font-mono text-xs break-all whitespace-pre-wrap text-[#00FF00] shadow-[6px_6px_0_0_#FFFF00]">
                 {`# Health Check
 curl ${SPOONOS_API_URL}/health
 
@@ -1756,25 +1875,42 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   label: "TOTAL COVERAGE",
                   value: formatUSD(mockSummary.totalValueUSD),
                   tone: "bg-slate-100",
-                  icon: <ShieldCheck className="h-5 w-5 text-slate-600" strokeWidth={2.5} />,
+                  icon: (
+                    <ShieldCheck
+                      className="h-5 w-5 text-slate-600"
+                      strokeWidth={2.5}
+                    />
+                  ),
                 },
                 {
                   label: "TX / 24H",
                   value: mockSummary.dailyTx.toLocaleString(),
                   tone: "bg-slate-100",
-                  icon: <Zap className="h-5 w-5 text-slate-600" strokeWidth={2.5} />,
+                  icon: (
+                    <Zap className="h-5 w-5 text-slate-600" strokeWidth={2.5} />
+                  ),
                 },
                 {
                   label: "OPEN ALERTS",
                   value: mockSummary.openAlerts,
                   tone: "bg-red-50",
-                  icon: <BellRing className="h-5 w-5 text-red-600" strokeWidth={2.5} />,
+                  icon: (
+                    <BellRing
+                      className="h-5 w-5 text-red-600"
+                      strokeWidth={2.5}
+                    />
+                  ),
                 },
                 {
                   label: "HIGH RISK",
                   value: mockSummary.highRiskWallets,
                   tone: "bg-amber-50",
-                  icon: <Radar className="h-5 w-5 text-amber-600" strokeWidth={2.5} />,
+                  icon: (
+                    <Radar
+                      className="h-5 w-5 text-amber-600"
+                      strokeWidth={2.5}
+                    />
+                  ),
                 },
               ].map((stat) => (
                 <Card
@@ -1782,13 +1918,13 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   className={`neo-card ${stat.tone} border-black`}
                 >
                   <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                    <CardTitle className="text-[10px] font-bold tracking-wider uppercase text-slate-600 truncate">
+                    <CardTitle className="truncate text-[10px] font-bold tracking-wider text-slate-600 uppercase">
                       {stat.label}
                     </CardTitle>
                     <div className="shrink-0">{stat.icon}</div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-black truncate">{stat.value}</p>
+                    <p className="truncate text-2xl font-black">{stat.value}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -1835,11 +1971,12 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                   </TableHeader>
                   <TableBody>
                     {mockWallets.map((wallet, i) => {
-                      const explorerUrl = wallet.chains[0] === "Ethereum"
-                        ? `https://etherscan.io/address/${wallet.address}`
-                        : wallet.chains[0] === "Neo N3"
-                          ? `https://neotube.io/address/${wallet.address}`
-                          : undefined;
+                      const explorerUrl =
+                        wallet.chains[0] === "Ethereum"
+                          ? `https://etherscan.io/address/${wallet.address}`
+                          : wallet.chains[0] === "Neo N3"
+                            ? `https://neotube.io/address/${wallet.address}`
+                            : undefined;
                       return (
                         <TableRow
                           key={wallet.address}
@@ -1851,8 +1988,10 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                               {wallet.tags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className={`text-xs px-1.5 py-0.5 border border-black/30 ${
-                                    tag === "exploited" || tag === "high-risk" || tag === "controversial"
+                                  className={`border border-black/30 px-1.5 py-0.5 text-xs ${
+                                    tag === "exploited" ||
+                                    tag === "high-risk" ||
+                                    tag === "controversial"
                                       ? "bg-[#FF0000] text-white"
                                       : tag === "trusted" || tag === "regulated"
                                         ? "bg-[#00FF00] text-black"
@@ -1867,7 +2006,8 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           <TableCell className="font-mono text-xs text-black">
                             <div className="flex items-center gap-2">
                               <span title={wallet.address}>
-                                {wallet.address.slice(0, 8)}...{wallet.address.slice(-6)}
+                                {wallet.address.slice(0, 8)}...
+                                {wallet.address.slice(-6)}
                               </span>
                               {explorerUrl && (
                                 <a
@@ -1983,7 +2123,7 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           <p className="font-mono text-xs tracking-wider text-black/60 uppercase">
                             ID: {alert.id}
                           </p>
-                          <p className="font-mono text-xs text-black/80 break-all">
+                          <p className="font-mono text-xs break-all text-black/80">
                             {alert.walletAddress}
                           </p>
                         </div>
@@ -2024,7 +2164,11 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                             asChild
                             className="neo-button border-4 border-black bg-[#00BFFF] px-4 font-black tracking-wider text-black uppercase shadow-[4px_4px_0_0_#000] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#000]"
                           >
-                            <a href={alert.explorerUrl} target="_blank" rel="noreferrer">
+                            <a
+                              href={alert.explorerUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
                               Explorer
                             </a>
                           </Button>
@@ -2066,9 +2210,13 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className={`text-xs font-black tracking-wider uppercase ${
-                            tx.type === "exploit" ? "text-[#FF0000]" : "text-black"
-                          }`}>
+                          <span
+                            className={`text-xs font-black tracking-wider uppercase ${
+                              tx.type === "exploit"
+                                ? "text-[#FF0000]"
+                                : "text-black"
+                            }`}
+                          >
                             {tx.type}
                           </span>
                           <span className="text-xs font-bold text-black/60 uppercase">
@@ -2076,7 +2224,8 @@ curl ${SPOONOS_API_URL}/x402/requirements`}
                           </span>
                         </div>
                         <p className="mt-1 text-lg font-black text-black">
-                          {tx.tokenSymbol} {tx.amountUSD > 0 && `• ${formatUSD(tx.amountUSD)}`}
+                          {tx.tokenSymbol}{" "}
+                          {tx.amountUSD > 0 && `• ${formatUSD(tx.amountUSD)}`}
                         </p>
                         {tx.riskFlag && (
                           <p className="mt-2 flex items-center gap-1 text-xs font-black text-[#FF0000] uppercase">

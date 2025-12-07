@@ -19,8 +19,12 @@ type VoiceStatus = {
   error: string | null;
 };
 
+type Persona = "professional" | "friendly" | "urgent" | "concise";
+
 type SpeakOptions = {
   severity?: Severity;
+  persona?: Persona;
+  useNaturalVoice?: boolean;
 };
 
 type QueueItem = {
@@ -136,16 +140,25 @@ export function useVoiceAnnouncements() {
 
   // Fetch audio from backend and play with Howler
   const playAudioFromBackend = useCallback(
-    async (message: string, severity: Severity): Promise<boolean> => {
+    async (message: string, severity: Severity, persona: Persona = "friendly", useNaturalVoice = true): Promise<boolean> => {
       try {
+        // Use "query" type with persona for more natural voice, or "alert" for robotic alerts
+        const requestBody = useNaturalVoice
+          ? {
+              type: "query" as const,
+              message,
+              persona,
+            }
+          : {
+              type: "alert" as const,
+              message,
+              severity,
+            };
+
         const res = await fetch("/api/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "alert",
-            message,
-            severity,
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         if (!res.ok) {
@@ -269,10 +282,12 @@ export function useVoiceAnnouncements() {
 
     const { message, options } = item;
     const severity = options.severity ?? "info";
+    const persona = options.persona ?? "friendly";
+    const useNaturalVoice = options.useNaturalVoice ?? true;
 
     try {
-      // Try backend first
-      let success = await playAudioFromBackend(message, severity);
+      // Try backend first with natural voice settings
+      let success = await playAudioFromBackend(message, severity, persona, useNaturalVoice);
 
       // Fall back to Web Speech if backend fails
       if (!success) {
@@ -429,4 +444,4 @@ export function useVoiceAnnouncements() {
   };
 }
 
-export type { VoiceConfig, VoiceStatus, SpeakOptions, Severity };
+export type { VoiceConfig, VoiceStatus, SpeakOptions, Severity, Persona };
