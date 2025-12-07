@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createParser, type EventSourceMessage } from "eventsource-parser";
 import {
   AlertTriangle,
   BellRing,
@@ -10,17 +9,8 @@ import {
   Zap,
   Bot,
   CreditCard,
-  Users,
-  GitCompare,
-  Clock,
-  Shield,
-  Plus,
-  X,
   Loader2,
   Bug,
-  FileText,
-  Copy,
-  Check,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -258,9 +248,10 @@ const DEFAULT_WALLET: Wallet = {
 
 export default function HomePage() {
   const primaryWallet = mockWallets[0] ?? DEFAULT_WALLET;
-  
+
   // Voice announcements hook
-  const { speak, isSpeaking, stop, config, toggleEnabled } = useVoiceAnnouncements();
+  const { speak, isSpeaking, stop, config, toggleEnabled } =
+    useVoiceAnnouncements();
 
   // Aggregate activities from all wallets and sort by timestamp
   const allActivities = Object.values(mockActivityByAddress)
@@ -506,148 +497,84 @@ export default function HomePage() {
 
     // Fetch AI analysis with real streaming
     const fetchAiAnalysis = async () => {
+      // Skip AI analysis entirely if paywalled mode is disabled
+      if (!usePaywalled) {
+        setAiAnalysis(null);
+        setStreamedText("");
+        return;
+      }
+
       // Cancel any existing streaming request
       abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
 
       try {
-        if (usePaywalled) {
-          // Use the x402 paywalled endpoint (non-streaming for now)
-          const headers: HeadersInit = {
-            "Content-Type": "application/json",
-          };
+        // Use the x402 paywalled endpoint (non-streaming for now)
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
 
-          // Add payment header if provided
+        // Add payment header if provided
+        if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
+          headers["X-PAYMENT"] = effectivePaymentHeader;
+          console.log(
+            "[x402] Sending payment header:",
+            effectivePaymentHeader.substring(0, 50) + "...",
+          );
+        } else {
+          console.log("[x402] No payment header, initial request");
+        }
+
+        console.log("[x402] Making request via proxy: /api/spoonos");
+
+        const spoonRes = await fetch("/api/spoonos", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            prompt: `analyze wallet ${scanAddress.trim()}`,
+          }),
+          signal: abortControllerRef.current.signal,
+        });
+
+        console.log("[x402] Response status:", spoonRes.status);
+
+        // Handle 402 Payment Required
+        if (spoonRes.status === 402) {
+          // If we already sent a payment header and still got 402, the payment was rejected
           if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
-            headers["X-PAYMENT"] = effectivePaymentHeader;
-            console.log(
-              "[x402] Sending payment header:",
-              effectivePaymentHeader.substring(0, 50) + "...",
-            );
-          } else {
-            console.log("[x402] No payment header, initial request");
-          }
-
-          console.log("[x402] Making request via proxy: /api/spoonos");
-
-          const spoonRes = await fetch("/api/spoonos", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              prompt: `analyze wallet ${scanAddress.trim()}`,
-            }),
-            signal: abortControllerRef.current.signal,
-          });
-
-          console.log("[x402] Response status:", spoonRes.status);
-
-          // Handle 402 Payment Required
-          if (spoonRes.status === 402) {
-            // If we already sent a payment header and still got 402, the payment was rejected
-            if (effectivePaymentHeader && effectivePaymentHeader.length > 0) {
-              const errorData = (await spoonRes.json()) as {
-                error?: string;
-                payer?: string;
-              };
-              console.error("[x402] Payment rejected:", errorData);
-              setScanError(
-                `Payment rejected: ${errorData.error ?? "Unknown error"}`,
-              );
-              setPaymentHeader(""); // Clear the invalid payment header
-              setScanStatus("error");
-              return;
-            }
-
-            const paymentData = (await spoonRes.json()) as {
-              accepts?: X402Requirements[];
+            const errorData = (await spoonRes.json()) as {
+              error?: string;
+              payer?: string;
             };
-            if (paymentData.accepts && paymentData.accepts.length > 0) {
-              setX402Requirements(paymentData.accepts[0] ?? null);
-            }
-            setScanStatus("payment_required");
+            console.error("[x402] Payment rejected:", errorData);
+            setScanError(
+              `Payment rejected: ${errorData.error ?? "Unknown error"}`,
+            );
+            setPaymentHeader(""); // Clear the invalid payment header
+            setScanStatus("error");
             return;
           }
 
-          if (!spoonRes.ok) {
-            const err = (await spoonRes.json().catch(() => ({}))) as {
-              detail?: string;
-            };
-            throw new Error(err.detail ?? "SpoonOS API error");
+          const paymentData = (await spoonRes.json()) as {
+            accepts?: X402Requirements[];
+          };
+          if (paymentData.accepts && paymentData.accepts.length > 0) {
+            setX402Requirements(paymentData.accepts[0] ?? null);
           }
-
-          const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
-          setAiAnalysis(spoonData);
-          setStreamedText(spoonData.result ?? "");
-        } else {
-          // Use the free streaming endpoint
-          const prompt = encodeURIComponent(
-            `analyze wallet ${scanAddress.trim()}`,
-          );
-
-          setIsStreaming(true);
-          streamingRef.current = true;
-          setStreamedText("");
-
-          const response = await fetch(
-            `${SPOONOS_API_URL}/analyze/stream?prompt=${prompt}`,
-            {
-              method: "POST",
-              signal: abortControllerRef.current.signal,
-            },
-          );
-
-          if (!response.ok) {
-            const err = (await response.json().catch(() => ({}))) as {
-              detail?: string;
-            };
-            throw new Error(err.detail ?? "SpoonOS API error");
-          }
-
-          const reader = response.body?.getReader();
-          if (!reader) {
-            throw new Error("No response body");
-          }
-
-          const decoder = new TextDecoder();
-          let fullText = "";
-
-          // Create SSE parser using eventsource-parser library
-          const parser = createParser({
-            onEvent: (event: EventSourceMessage) => {
-              const data = event.data;
-              if (data === "[DONE]") {
-                streamingRef.current = false;
-                setIsStreaming(false);
-              } else if (data === "[CLEAR]") {
-                // Clear previous text (used when switching from status to actual response)
-                fullText = "";
-                setStreamedText(fullText);
-              } else if (data.startsWith("[ERROR]")) {
-                throw new Error(data.slice(8));
-              } else {
-                fullText += data;
-                setStreamedText(fullText);
-              }
-            },
-          });
-
-          try {
-            while (streamingRef.current) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const chunk = decoder.decode(value, { stream: true });
-              parser.feed(chunk);
-            }
-          } finally {
-            reader.releaseLock();
-          }
-
-          // Set final AI analysis
-          setAiAnalysis({ result: fullText });
-          setIsStreaming(false);
-          streamingRef.current = false;
+          setScanStatus("payment_required");
+          return;
         }
+
+        if (!spoonRes.ok) {
+          const err = (await spoonRes.json().catch(() => ({}))) as {
+            detail?: string;
+          };
+          throw new Error(err.detail ?? "SpoonOS API error");
+        }
+
+        const spoonData = (await spoonRes.json()) as SpoonOSAnalysis;
+        setAiAnalysis(spoonData);
+        setStreamedText(spoonData.result ?? "");
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
           console.log("AI analysis request aborted");
@@ -1399,10 +1326,11 @@ export default function HomePage() {
                                   if (isSpeaking) {
                                     stop();
                                   } else {
-                                    const text = streamedText || aiAnalysis.result || "";
+                                    const text =
+                                      streamedText ?? aiAnalysis.result ?? "";
                                     if (text) {
                                       // Use natural voice with friendly persona for better TTS
-                                      speak(text, { 
+                                      speak(text, {
                                         severity: "info",
                                         persona: "friendly",
                                         useNaturalVoice: true,
@@ -1410,18 +1338,31 @@ export default function HomePage() {
                                     }
                                   }
                                 }}
-                                disabled={isStreaming || (!streamedText && !aiAnalysis.result)}
+                                disabled={
+                                  isStreaming ||
+                                  (!streamedText && !aiAnalysis.result)
+                                }
                                 className={`neo-button border-2 border-black px-3 py-1 font-black uppercase shadow-[3px_3px_0_0_#FFFF00] transition-none hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[2px_2px_0_0_#FFFF00] disabled:opacity-50 ${
-                                  isSpeaking 
-                                    ? "bg-[#FF0000] text-white" 
+                                  isSpeaking
+                                    ? "bg-[#FF0000] text-white"
                                     : "bg-[#00FF00] text-black"
                                 }`}
-                                title={isSpeaking ? "Stop speaking" : "Read analysis aloud"}
+                                title={
+                                  isSpeaking
+                                    ? "Stop speaking"
+                                    : "Read analysis aloud"
+                                }
                               >
                                 {isSpeaking ? (
-                                  <VolumeX className="h-4 w-4" strokeWidth={3} />
+                                  <VolumeX
+                                    className="h-4 w-4"
+                                    strokeWidth={3}
+                                  />
                                 ) : (
-                                  <Volume2 className="h-4 w-4" strokeWidth={3} />
+                                  <Volume2
+                                    className="h-4 w-4"
+                                    strokeWidth={3}
+                                  />
                                 )}
                               </Button>
                               <Badge
@@ -1454,7 +1395,9 @@ export default function HomePage() {
                             {isSpeaking && (
                               <div className="flex items-center gap-2">
                                 <div className="h-2 w-2 animate-pulse rounded-full bg-[#00FF00]" />
-                                <span className="text-xs font-bold text-[#00FF00]">Speaking...</span>
+                                <span className="text-xs font-bold text-[#00FF00]">
+                                  Speaking...
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1573,7 +1516,7 @@ export default function HomePage() {
                         Network:
                       </span>
                       <div className="flex gap-2">
-                        <span className="neo-pill border-3 border-black px-4 py-2 text-xs font-black uppercase bg-[#00BFFF] text-black shadow-[3px_3px_0_0_#000]">
+                        <span className="neo-pill border-3 border-black bg-[#00BFFF] px-4 py-2 text-xs font-black text-black uppercase shadow-[3px_3px_0_0_#000]">
                           Mainnet
                         </span>
                       </div>
