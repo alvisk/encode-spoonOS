@@ -55,3 +55,5 @@ ${anomalies24h > 0 ? `**${anomalies24h} anomaly(ies)** detected in the last 24 h
 
 
 
+
+
