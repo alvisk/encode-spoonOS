@@ -61,6 +61,7 @@
     "port": 8000
   },
   "contract_hash": "0x53d203e3a44dbdde8c6c2b766fbd7673e6e27e9c",
-  "malicious_oracle_hash": "0xe02c262b7755ca1aa75acc7ebde1bde566d14e57",
-  "malicious_oracle_network": "neo_testnet"
+  "malicious_oracle_hash": "0xce0910e051ecfbca645d3dbd4417ed447bbdbb9a",
+  "malicious_oracle_network": "neo_testnet",
+  "malicious_oracle_api_url": "https://encode-spoonos-production.up.railway.app/api/v2/contract-scan/"
 }
