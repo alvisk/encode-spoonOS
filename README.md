@@ -6,9 +6,11 @@ AI-powered multi-chain wallet security agent built on **SpoonOS** with **Neo N3 
 > **Hackathon**: Encode x SpoonOS (December 2025)
 
 ## Live Demo
+ 
 
 | Resource | URL |
 |----------|-----|
+| **Website** | https://assertion.vercel.app/ |
 | **API** | https://encode-spoonos-production.up.railway.app |
 | **Docs** | https://encode-spoonos-production.up.railway.app/docs |
 
